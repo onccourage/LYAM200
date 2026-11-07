@@ -23,6 +23,49 @@ def _path(value: str) -> Path:
     return p if p.is_absolute() else ROOT_DIR / p
 
 
+@dataclass(frozen=True)
+class LLMProfile:
+    """Один именованный профиль модели (провайдер+ключ+цены) — для переключателя в UI
+    («разнообразие подходов»: облачная модель / локальная через Ollama и т.п.). Ключи задаются
+    только на сервере в .env, в браузер уходят лишь id/label/model/provider — без секретов."""
+    id: str
+    label: str
+    provider: str                # "anthropic" | "openai_compatible"
+    model: str
+    base_url: str = ""
+    api_key: str = ""
+    price_input_per_mtok: Decimal = Decimal(0)
+    price_output_per_mtok: Decimal = Decimal(0)
+
+    def public(self) -> dict:
+        return {"id": self.id, "label": self.label, "provider": self.provider, "model": self.model}
+
+
+def _load_extra_profiles(max_slots: int = 5) -> list[LLMProfile]:
+    """LLM_PROFILE_2_* .. LLM_PROFILE_{max_slots}_* — дополнительные профили (профиль 1 — основной,
+    из обычных ANTHROPIC_*/LLM_* переменных). Числовые суффиксы, а не JSON — проще редактировать в .env руками.
+    Слот учитывается, только если задан LLM_PROFILE_N_MODEL."""
+    profiles = []
+    for n in range(2, max_slots + 1):
+        model = _env(f"LLM_PROFILE_{n}_MODEL")
+        if not model:
+            continue
+        provider = _env(f"LLM_PROFILE_{n}_PROVIDER", "openai_compatible")
+        price_in = _env(f"LLM_PROFILE_{n}_PRICE_INPUT_PER_MTOK", "0")
+        price_out = _env(f"LLM_PROFILE_{n}_PRICE_OUTPUT_PER_MTOK", "0")
+        profiles.append(LLMProfile(
+            id=_env(f"LLM_PROFILE_{n}_ID", f"profile{n}"),
+            label=_env(f"LLM_PROFILE_{n}_LABEL", model),
+            provider=provider,
+            model=model,
+            base_url=_env(f"LLM_PROFILE_{n}_BASE_URL"),
+            api_key=_env(f"LLM_PROFILE_{n}_API_KEY"),
+            price_input_per_mtok=Decimal(price_in or "0"),
+            price_output_per_mtok=Decimal(price_out or "0"),
+        ))
+    return profiles
+
+
 @dataclass
 class Settings:
     anthropic_api_key: str = field(default_factory=lambda: _env("ANTHROPIC_API_KEY"))
@@ -65,6 +108,27 @@ class Settings:
     db_path: Path = field(default_factory=lambda: _path(_env("DB_PATH", "data/cqa.db")))
     data_dir: Path = ROOT_DIR / "data"
     web_dir: Path = ROOT_DIR / "web"
+    extra_llm_profiles: list[LLMProfile] = field(default_factory=_load_extra_profiles)
+
+    @property
+    def llm_profiles(self) -> list[LLMProfile]:
+        """Основной профиль (из ANTHROPIC_*/LLM_* переменных) + дополнительные LLM_PROFILE_N_*."""
+        default = LLMProfile(
+            id="default", label=_env("LLM_PROFILE_1_LABEL", self.llm_model), provider=self.llm_provider,
+            model=self.llm_model, base_url=self.llm_base_url,
+            api_key=self.llm_api_key if self.llm_provider != "anthropic" else self.anthropic_api_key,
+            price_input_per_mtok=self.price_input_per_mtok, price_output_per_mtok=self.price_output_per_mtok,
+        )
+        return [default, *self.extra_llm_profiles]
+
+    def get_profile(self, profile_id: str | None) -> LLMProfile:
+        profiles = self.llm_profiles
+        if not profile_id or profile_id == "default":
+            return profiles[0]
+        for p in profiles:
+            if p.id == profile_id:
+                return p
+        raise KeyError(f"неизвестный профиль модели: {profile_id!r} (доступны: {[p.id for p in profiles]})")
 
     @property
     def cache_dir(self) -> Path:
@@ -85,6 +149,7 @@ class Settings:
             "llm_configured": bool(self.anthropic_api_key) or self.llm_provider != "anthropic",
             "explanation_lang": self.explanation_lang,
             "long_pause_sec": self.long_pause_sec,
+            "llm_profiles": [p.public() for p in self.llm_profiles],
         }
 
 

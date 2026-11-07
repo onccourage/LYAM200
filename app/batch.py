@@ -144,13 +144,18 @@ class BatchManager:
     def start(self, job_id: int) -> None:
         cancel = asyncio.Event()
         self.cancels[job_id] = cancel
-        provider = self.provider_factory()
+        job = db.get_batch_job(job_id, path=self.db_path)
+        # provider_factory — для «профиля по умолчанию» (и подмена в тестах); для явно выбранного
+        # профиля модели (переключатель в UI) всегда резолвим через get_provider по id профиля
+        profile = (job or {}).get("provider") or "default"
+        provider = self.provider_factory() if profile == "default" else get_provider(profile)
         self.tasks[job_id] = asyncio.create_task(run_job(job_id, provider, db_path=self.db_path, cancel_event=cancel))
 
     def submit(self, group_id: str, checklist: Checklist, conversation_ids: list[str], *, full: bool = False,
-               skip_evaluated: bool = True, samples: int = 1) -> int:
+               skip_evaluated: bool = True, samples: int = 1, provider: str = "default") -> int:
+        settings.get_profile(provider)  # KeyError сразу, не глубоко внутри фоновой задачи
         job_id = db.create_batch_job(group_id, checklist.id, checklist.version, conversation_ids, full, skip_evaluated,
-                                     path=self.db_path, samples=samples)
+                                     path=self.db_path, samples=samples, provider=provider)
         self.start(job_id)
         return job_id
 

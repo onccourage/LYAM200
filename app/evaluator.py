@@ -233,7 +233,8 @@ async def evaluate_conversation(
         "tokens_in": usage.input_tokens + usage.cache_creation_input_tokens + usage.cache_read_input_tokens,
         "tokens_out": usage.output_tokens,
         "llm_calls": usage.calls,
-        "cost": str(usage.cost().quantize(Decimal("0.000001"))),
+        "cost": str(usage.cost(provider.price_input_per_mtok, provider.price_output_per_mtok)
+                    .quantize(Decimal("0.000001"))),
         "raw_responses": raw_log,
         "llm_error": llm_error,
         "llm_fatal": any(x.get("fatal") for x in raw_log),

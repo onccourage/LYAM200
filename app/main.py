@@ -200,20 +200,26 @@ def api_save_checklist(body: dict) -> dict:
 
 @app.post("/api/evaluations/{group_id}/{conversation_id}")
 async def api_evaluate(group_id: str, conversation_id: str, checklist_id: str = "default_chat",
-                       checklist_version: int | None = None, full: bool = False, samples: int | None = None) -> dict:
-    """Оценить один диалог. full=true — сбросить кэш критериев для этого диалога."""
+                       checklist_version: int | None = None, full: bool = False, samples: int | None = None,
+                       provider: str = "default") -> dict:
+    """Оценить один диалог. full=true — сбросить кэш критериев для этого диалога.
+    provider — id профиля модели (переключатель в UI; "default" — из .env)."""
     conv = db.get_conversation(group_id, conversation_id)
     if conv is None:
         raise HTTPException(status_code=404, detail="Диалог не найден")
     cl = db.get_checklist(checklist_id, checklist_version)
     if cl is None:
         raise HTTPException(status_code=404, detail="Чек-лист не найден")
-    _require_llm()
     try:
-        provider = get_provider()
+        settings.get_profile(provider)
+    except KeyError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    _require_llm(provider)
+    try:
+        provider_obj = get_provider(provider)
     except LLMError as e:
         raise HTTPException(status_code=503, detail=str(e))
-    out = await evaluate_conversation(conv, cl, provider, use_cache=not full, samples=samples)
+    out = await evaluate_conversation(conv, cl, provider_obj, use_cache=not full, samples=samples)
     if out.record["status"] == "error":
         raise HTTPException(status_code=502, detail=f"Модель недоступна: {out.record['llm_error']}")
     rec = dict(out.record)
@@ -285,16 +291,23 @@ class BatchRequest(BaseModel):
     full: bool = False                          # сбросить кэш критериев
     skip_evaluated: bool = True                 # пропустить уже оценённые этой версией
     samples: int = 1                            # >1 — консенсус нескольких проходов модели
+    provider: str = "default"                   # id профиля модели (переключатель в UI)
 
 
-def _require_llm() -> None:
-    if settings.llm_provider == "anthropic" and not settings.anthropic_api_key:
+def _require_llm(profile: str = "default") -> None:
+    # для не-основного профиля (например, локальный Ollama без ключа) проверка ключа не применима —
+    # конкретную ошибку подключения покажет сам провайдер при вызове (LLMError → 503)
+    if profile == "default" and settings.llm_provider == "anthropic" and not settings.anthropic_api_key:
         raise HTTPException(status_code=503, detail="ANTHROPIC_API_KEY не задан в .env — оценка недоступна")
 
 
 @app.post("/api/batches")
 async def api_start_batch(req: BatchRequest) -> dict:
-    _require_llm()
+    try:
+        settings.get_profile(req.provider)
+    except KeyError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    _require_llm(req.provider)
     cl = db.get_checklist(req.checklist_id, req.checklist_version)
     if cl is None:
         raise HTTPException(status_code=404, detail="Чек-лист не найден")
@@ -310,7 +323,8 @@ async def api_start_batch(req: BatchRequest) -> dict:
         raise HTTPException(status_code=409, detail=f"Для набора уже идёт пакетная оценка #{active}")
     if not 1 <= req.samples <= 7:
         raise HTTPException(status_code=400, detail="samples: от 1 до 7")
-    job_id = batches.submit(req.group_id, cl, ids, full=req.full, skip_evaluated=req.skip_evaluated, samples=req.samples)
+    job_id = batches.submit(req.group_id, cl, ids, full=req.full, skip_evaluated=req.skip_evaluated,
+                            samples=req.samples, provider=req.provider)
     return db.get_batch_job(job_id)
 
 

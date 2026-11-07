@@ -2,7 +2,7 @@
 import { api } from "../api.js";
 import { clear, errorBox, h, spinner, toast } from "../dom.js";
 import { CHANNEL } from "../labels.js";
-import { activeChecklist, samplesPref } from "../state.js";
+import { activeChecklist, providerPref, runtime, samplesPref, setPref } from "../state.js";
 import { iconArrowLeft } from "../icons.js";
 import { createEvaluationPanel } from "./evaluation.js";
 import { createTranscript } from "./transcript.js";
@@ -36,13 +36,22 @@ export async function renderConversation(root, { group, conv, focus }) {
   const transcript = createTranscript(conversation);
   const right = h("div", { class: "right-col" });
 
+  // Переключатель профиля модели (та же настройка, что и в пакетной оценке) — только если
+  // в .env задан хотя бы один дополнительный профиль (LLM_PROFILE_2_*).
+  const profiles = runtime.config?.llm_profiles || [];
+  const providerSel = profiles.length > 1 ? h("select", { class: "input input-sm", "aria-label": "Модель",
+    title: "Профиль модели — настраивается в .env (LLM_PROFILE_N_*), ключи не покидают сервер",
+    onchange: () => setPref("provider", providerSel.value) },
+  profiles.map((p) => h("option", { value: p.id, selected: p.id === providerPref() }, `${p.label} (${p.provider})`))) : null;
+
   const head = h("div", { class: "conv-head" },
     h("a", { class: "back", href: `#/d/${encodeURIComponent(group)}` }, iconArrowLeft({ size: 14 }), " К набору ", group),
     h("h1", { class: "page-title" }, conversation.conversation_id),
     h("div", { class: "conv-tags" },
       h("span", { class: "chip" }, CHANNEL[conversation.channel] || conversation.channel),
       h("span", { class: "chip" }, conversation.language || "язык не указан"),
-      conversation.audio_url ? h("span", { class: "chip" }, "есть запись") : null));
+      conversation.audio_url ? h("span", { class: "chip" }, "есть запись") : null,
+      providerSel));
 
   clear(root).append(h("div", { class: "page page-wide" }, head,
     h("div", { class: "conv-grid" }, transcript.el, right)));
@@ -51,7 +60,8 @@ export async function renderConversation(root, { group, conv, focus }) {
     const busy = h("div", { class: "overlay" }, spinner(full ? "Полная переоценка…" : "Оцениваю…"));
     right.append(busy);
     try {
-      const r = await api.evaluate(group, conv, { checklistId: latest?.id || checklistId, full, samples: samplesPref() });
+      const r = await api.evaluate(group, conv, { checklistId: latest?.id || checklistId, full, samples: samplesPref(),
+        provider: providerSel ? providerSel.value : providerPref() });
       const note = r.llm_criteria.length
         ? `в LLM: ${r.llm_criteria.join(", ")}` : "всё из кэша, без вызова LLM";
       toast(`Оценено: ${r.total ?? "не рассчитывается"} (${note})`, "ok");

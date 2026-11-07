@@ -53,7 +53,7 @@ def api_client(tmp_path, monkeypatch, mock_payload):
     (tmp_path / "checklists/default_chat_v1.json").write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
     (tmp_path / "cache/MOCK.json").write_text(json.dumps(mock_payload), encoding="utf-8")
     fake = FakeProvider(make_responder())
-    monkeypatch.setattr(main, "get_provider", lambda: fake)
+    monkeypatch.setattr(main, "get_provider", lambda profile=None: fake)
     monkeypatch.setattr(main.batches, "provider_factory", lambda: fake)
     with TestClient(main.app) as client:
         assert client.post("/api/datasets/MOCK/load").status_code == 200

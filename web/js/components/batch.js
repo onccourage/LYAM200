@@ -1,7 +1,7 @@
 // Пакетная оценка: запуск (выбранные / весь набор), прогресс с опросом бэкенда, отмена, продолжение.
 import { api } from "../api.js";
 import { h, toast } from "../dom.js";
-import { activeChecklist, samplesPref, setPref } from "../state.js";
+import { activeChecklist, providerPref, runtime, samplesPref, setPref } from "../state.js";
 
 const POLL_MS = 1000;
 const ACTIVE = new Set(["queued", "running"]);
@@ -25,10 +25,19 @@ export function createBatchPanel({ group, getSelected, onProgress, onFinished })
     clSelect.replaceChildren(...list.map((c) => h("option", { value: c.checklist_id, selected: c.checklist_id === cur },
       `${c.name} · v${c.latest_version}`)));
   }).catch(() => {});
+
+  // Переключатель профиля модели («разнообразие подходов»: облачная/локальная модель и т.п.) — только
+  // если в .env настроен хотя бы один дополнительный профиль (LLM_PROFILE_2_*); иначе не загромождаем UI.
+  const profiles = runtime.config?.llm_profiles || [];
+  const providerSel = profiles.length > 1 ? h("select", { class: "input input-sm", "aria-label": "Модель",
+    title: "Профиль модели — настраивается в .env (LLM_PROFILE_N_*), ключи не покидают сервер",
+    onchange: () => setPref("provider", providerSel.value) },
+  profiles.map((p) => h("option", { value: p.id, selected: p.id === providerPref() }, `${p.label} (${p.provider})`))) : null;
   let timer = null, lastProcessed = -1;
 
   const el = h("div", { class: "batch" },
-    h("div", { class: "batch-controls" }, h("span", { class: "muted small" }, "Чек-лист:"), clSelect, samplesSel, selBtn, allBtn,
+    h("div", { class: "batch-controls" }, h("span", { class: "muted small" }, "Чек-лист:"), clSelect, samplesSel,
+      providerSel, selBtn, allBtn,
       h("label", { class: "check", for: "batch-full", title: "Сбросить кэш критериев и заново спросить модель по всем критериям" },
         fullBox, " полностью, без кэша")),
     progress);
@@ -38,7 +47,8 @@ export function createBatchPanel({ group, getSelected, onProgress, onFinished })
     if (full && !confirm("Полная переоценка заново вызовет модель по всем критериям. Продолжить?")) return;
     try {
       const job = await api.startBatch({ group_id: group, conversation_ids: ids && ids.length ? ids : null, full,
-        checklist_id: clSelect.value || activeChecklist(), samples: Number(samplesSel.value) || 1 });
+        checklist_id: clSelect.value || activeChecklist(), samples: Number(samplesSel.value) || 1,
+        provider: providerSel ? providerSel.value : providerPref() });
       toast(`Пакетная оценка #${job.id}: ${job.total} диалогов`, "ok");
       show(job);
       poll(job.id);
@@ -58,7 +68,7 @@ export function createBatchPanel({ group, getSelected, onProgress, onFinished })
       h("div", { class: "batch-line" },
         h("strong", {}, `Задание #${job.id}`),
         h("span", { class: `chip ${active ? "chip-partial" : job.status === "done" && !job.failed ? "chip-done" : "chip-bad"}` }, STATUS[job.status] || job.status),
-        h("span", { class: "muted small" }, `${job.checklist_id} v${job.checklist_version}${job.full ? " · полностью" : ""}${job.samples > 1 ? ` · консенсус ×${job.samples}` : ""}`)),
+        h("span", { class: "muted small" }, `${job.checklist_id} v${job.checklist_version}${job.full ? " · полностью" : ""}${job.samples > 1 ? ` · консенсус ×${job.samples}` : ""}${job.provider && job.provider !== "default" ? ` · модель: ${(profiles.find((p) => p.id === job.provider) || {}).label || job.provider}` : ""}`)),
       h("div", { class: "bar bar-lg", role: "progressbar", "aria-valuemin": "0", "aria-valuemax": String(job.total), "aria-valuenow": String(job.processed) },
         h("div", { class: "bar-fill", style: `width:${pct}%` })),
       h("div", { class: "batch-line small" },

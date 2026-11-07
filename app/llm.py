@@ -55,10 +55,12 @@ class LLMUsage:
         self.cache_read_input_tokens += other.cache_read_input_tokens
         self.calls += other.calls
 
-    def cost(self) -> Decimal:
-        """Стоимость в USD по ценам из конфига."""
+    def cost(self, price_input_per_mtok: Decimal | None = None, price_output_per_mtok: Decimal | None = None) -> Decimal:
+        """Стоимость в USD. Без аргументов — по ценам из .env (профиль по умолчанию); при переключении
+        профиля модели вызывающая сторона передаёт цены выбранного провайдера (provider.price_*)."""
         mtok = Decimal(1_000_000)
-        p_in, p_out = settings.price_input_per_mtok, settings.price_output_per_mtok
+        p_in = settings.price_input_per_mtok if price_input_per_mtok is None else price_input_per_mtok
+        p_out = settings.price_output_per_mtok if price_output_per_mtok is None else price_output_per_mtok
         return (
             Decimal(self.input_tokens) * p_in
             + Decimal(self.cache_creation_input_tokens) * p_in * settings.price_cache_write_mult
@@ -104,11 +106,14 @@ def _parse_json(text: str) -> dict:
 # ---------------------------------------------------------------- Anthropic
 
 class AnthropicProvider:
-    def __init__(self, model: str | None = None, api_key: str | None = None):
+    def __init__(self, model: str | None = None, api_key: str | None = None,
+                price_input_per_mtok: Decimal | None = None, price_output_per_mtok: Decimal | None = None):
         import anthropic
 
         self._anthropic = anthropic
         self.model = model or settings.llm_model
+        self.price_input_per_mtok = settings.price_input_per_mtok if price_input_per_mtok is None else price_input_per_mtok
+        self.price_output_per_mtok = settings.price_output_per_mtok if price_output_per_mtok is None else price_output_per_mtok
         self.client = anthropic.AsyncAnthropic(
             api_key=api_key or settings.anthropic_api_key or None,
             base_url=settings.anthropic_api_base,
@@ -175,10 +180,13 @@ class AnthropicProvider:
 class OpenAICompatibleProvider:
     """Локальная модель через /chat/completions с response_format=json_schema."""
 
-    def __init__(self, model: str | None = None, base_url: str | None = None, api_key: str | None = None):
+    def __init__(self, model: str | None = None, base_url: str | None = None, api_key: str | None = None,
+                price_input_per_mtok: Decimal | None = None, price_output_per_mtok: Decimal | None = None):
         import httpx
 
         self.model = model or settings.llm_model
+        self.price_input_per_mtok = settings.price_input_per_mtok if price_input_per_mtok is None else price_input_per_mtok
+        self.price_output_per_mtok = settings.price_output_per_mtok if price_output_per_mtok is None else price_output_per_mtok
         self.base_url = (base_url or settings.llm_base_url).rstrip("/")
         if not self.base_url:
             raise LLMError("LLM_BASE_URL не задан для openai_compatible")
@@ -239,6 +247,8 @@ class FakeProvider:
     def __init__(self, responder: Callable[[str, str, dict], dict], model: str = "fake-model"):
         self.responder = responder
         self.model = model
+        self.price_input_per_mtok = settings.price_input_per_mtok
+        self.price_output_per_mtok = settings.price_output_per_mtok
         self.requests: list[dict] = []
 
     async def complete_json(self, system: str, user: str, schema: dict, *, sample: int = 0) -> LLMResponse:
@@ -252,7 +262,11 @@ class FakeProvider:
         return LLMResponse(data=data, text=text, model=self.model, usage=usage, stop_reason="end_turn")
 
 
-def get_provider() -> LLMProvider:
-    if settings.llm_provider == "openai_compatible":
-        return OpenAICompatibleProvider()
-    return AnthropicProvider()
+def get_provider(profile: str | None = None) -> LLMProvider:
+    """profile=None (или "default") — провайдер из основных LLM_*/ANTHROPIC_* переменных,
+    иначе — из профиля LLM_PROFILE_N_* с этим id (переключатель модели в UI)."""
+    p = settings.get_profile(profile)
+    kwargs = dict(model=p.model, price_input_per_mtok=p.price_input_per_mtok, price_output_per_mtok=p.price_output_per_mtok)
+    if p.provider == "openai_compatible":
+        return OpenAICompatibleProvider(base_url=p.base_url, api_key=p.api_key, **kwargs)
+    return AnthropicProvider(api_key=p.api_key, **kwargs)

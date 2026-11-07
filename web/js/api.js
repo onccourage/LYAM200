@@ -62,9 +62,9 @@ export const api = {
   },
   getEvaluation: (groupId, convId, raw = false) => request("GET", `/evaluations/${enc(groupId)}/${enc(convId)}`, { query: raw ? { raw: true } : undefined }),
   getEvaluationPrompt: (groupId, convId) => request("GET", `/evaluations/${enc(groupId)}/${enc(convId)}/prompt`),
-  evaluate: (groupId, convId, { checklistId, checklistVersion, full = false, samples } = {}) =>
+  evaluate: (groupId, convId, { checklistId, checklistVersion, full = false, samples, provider } = {}) =>
     request("POST", `/evaluations/${enc(groupId)}/${enc(convId)}`,
-      { query: { checklist_id: checklistId, checklist_version: checklistVersion, full, samples } }),
+      { query: { checklist_id: checklistId, checklist_version: checklistVersion, full, samples, provider } }),
   analytics: (groupId, checklistId) => request("GET", `/datasets/${enc(groupId)}/analytics`, { query: { checklist_id: checklistId } }),
   datasetStats: (groupId) => request("GET", `/datasets/${enc(groupId)}/stats`),
   startBatch: (payload) => request("POST", "/batches", { body: payload }),

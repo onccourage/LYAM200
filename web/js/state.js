@@ -36,3 +36,9 @@ export function samplesPref() {
   const n = Number(pref("samples", "1"));
   return Number.isInteger(n) && n >= 1 && n <= 7 ? n : 1;
 }
+
+// Профиль модели (переключатель провайдера в UI — "default" или id из LLM_PROFILE_N_* в .env).
+// Список профилей известен только после загрузки /api/config (runtime.config.llm_profiles).
+export function providerPref() {
+  return pref("provider", "default");
+}

@@ -159,6 +159,7 @@ MIGRATIONS = [
     ("evaluations", "origin", "TEXT NOT NULL DEFAULT 'live'"),
     ("batch_jobs", "samples", "INTEGER NOT NULL DEFAULT 1"),
     ("evaluations", "samples", "INTEGER NOT NULL DEFAULT 1"),   # live — оценено здесь; seed — загружено из сида
+    ("batch_jobs", "provider", "TEXT NOT NULL DEFAULT 'default'"),   # профиль модели (переключатель в UI)
 ]
 
 
@@ -432,14 +433,15 @@ def list_current_evaluations(group_id: str, path: Path | None = None) -> list[di
 # ---------------------------------------------------------------- пакетные задания
 
 def create_batch_job(group_id: str, checklist_id: str, checklist_version: int, conversation_ids: list[str],
-                     full: bool, skip_evaluated: bool, path: Path | None = None, samples: int = 1) -> int:
+                     full: bool, skip_evaluated: bool, path: Path | None = None, samples: int = 1,
+                     provider: str = "default") -> int:
     ts = now_iso()
     with connect(path) as conn:
         cur = conn.execute(
             "INSERT INTO batch_jobs(group_id, checklist_id, checklist_version, conversation_ids, full, skip_evaluated, "
-            "status, total, created_at, updated_at, samples) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            "status, total, created_at, updated_at, samples, provider) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
             (group_id, checklist_id, checklist_version, json.dumps(conversation_ids), int(full), int(skip_evaluated),
-             "queued", len(conversation_ids), ts, ts, int(samples)),
+             "queued", len(conversation_ids), ts, ts, int(samples), provider or "default"),
         )
         return cur.lastrowid
 
