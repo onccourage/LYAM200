@@ -65,6 +65,7 @@ export async function renderConversation(root, { group, conv, focus }) {
     right.append(createEvaluationPanel({
       evaluation, checklist: usedChecklist, latestVersion: latest?.version, conversation, transcript,
       onReevaluate: reevaluate,
+      onChanged: () => renderConversation(root, { group, conv }),
     }));
   } else {
     right.append(h("section", { class: "panel eval-panel" },

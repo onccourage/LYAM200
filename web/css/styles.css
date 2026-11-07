@@ -119,6 +119,7 @@ h1, h2, h3 { margin: 0; line-height: 1.25; }
 .chip-bad, .chip-error { background: var(--bad-bg); color: var(--bad); }
 .chip-review { background: var(--review-bg); color: var(--review); }
 .chip-na { background: var(--na-bg); color: var(--na); }
+.chip-block { display: block; width: max-content; margin-top: 4px; }
 .badge-gross { display: inline-block; margin-left: 6px; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 700; background: var(--bad); color: #fff; }
 
 /* ---------- table */
@@ -223,6 +224,40 @@ h1, h2, h3 { margin: 0; line-height: 1.25; }
 .low-conf { color: var(--mid); font-weight: 600; }
 .overlay { position: absolute; inset: 0; background: color-mix(in srgb, var(--surface) 75%, transparent); display: flex; align-items: flex-start; justify-content: center; padding-top: 80px; border-radius: var(--radius); z-index: 5; }
 
+/* ---------- roles, appeals */
+.role-switch { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.role-switch button { border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 13px; padding: 5px 10px; cursor: pointer; }
+.role-switch button.active { background: var(--accent); color: var(--accent-text); }
+.nav-count { display: inline-block; min-width: 18px; margin-left: 6px; padding: 0 5px; border-radius: 9px; background: var(--bad); color: #fff; font-size: 12px; text-align: center; }
+.tabs { display: flex; gap: 4px; margin-bottom: 12px; border-bottom: 1px solid var(--border); }
+.tab { padding: 8px 12px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tab.active { color: var(--text); border-bottom-color: var(--accent); text-decoration: none; }
+.orig-total { margin-top: 6px; font-size: 12px; color: var(--mid); max-width: 170px; }
+.appeal-note { font-size: 13px; padding: 6px 8px; border-radius: 6px; background: var(--surface-2); border-left: 3px solid var(--na); }
+.appeal-open { border-left-color: var(--mid); }
+.appeal-changed { border-left-color: var(--accent); }
+.appeal-btn { align-self: flex-start; height: 28px; padding: 0 8px; color: var(--accent); }
+.appeal-form { display: flex; flex-direction: column; gap: 6px; }
+.appeal-form-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.appeal-form-row .input { flex: 1; min-width: 160px; }
+.textarea { height: auto; padding: 8px 10px; resize: vertical; width: 100%; font: inherit; }
+.history { display: flex; flex-direction: column; gap: 6px; }
+.history-list { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.stack { display: flex; flex-direction: column; gap: 16px; }
+.panel-stack { display: flex; flex-direction: column; gap: 8px; }
+.panel-stack .panel-head { margin-bottom: 0; }
+.panel-stack .crit-group-title { margin-top: 8px; }
+.comment { margin: 0; padding: 8px 12px; border-left: 3px solid var(--mid); background: var(--surface-2); border-radius: 0 6px 6px 0; }
+.scale-list { margin: 0; padding-left: 18px; }
+.scale-list li.current { font-weight: 700; color: var(--accent); }
+.decision-form { display: flex; flex-direction: column; gap: 12px; }
+.decision-form .field .input { width: 100%; }
+.radios { display: flex; gap: 16px; flex-wrap: wrap; }
+.radios .check { color: var(--text); }
+.gross-pick { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.meta-lg { font-size: 14px; gap: 6px 16px; }
+[hidden] { display: none !important; }
+
 /* ---------- toast */
 .toast { position: fixed; right: 16px; bottom: 16px; max-width: min(460px, calc(100vw - 32px)); padding: 10px 14px; border-radius: 8px; background: var(--text); color: var(--bg); opacity: 0; transform: translateY(8px); transition: .2s; pointer-events: none; z-index: 50; }
 .toast.show { opacity: 1; transform: none; }
@@ -242,10 +277,13 @@ h1, h2, h3 { margin: 0; line-height: 1.25; }
   #group-id { width: 100%; }
   .toolbar .field { flex: 1 1 100%; }
   .model-info { display: none; }
+  .role-switch button { padding: 5px 6px; font-size: 12px; }
+  .topbar { gap: 8px; padding: 0 10px; }
   .preview { max-width: 40vw; }
   .table td, .table th { padding-left: 6px; padding-right: 6px; }
   .table .chip { white-space: normal; }
-  .badge-gross { display: block; width: max-content; margin: 4px 0 0; }
+  .chip-block { display: block; width: max-content; margin-top: 4px; }
+.badge-gross { display: block; width: max-content; margin: 4px 0 0; }
   .col-opt { display: none; }
   .row-tags { display: block; }
 }

@@ -5,7 +5,7 @@ import { CHANNEL, EVAL_STATUS, GROSS } from "../labels.js";
 import { pref, setPref, runtime } from "../state.js";
 import { createBatchPanel, createStats } from "./batch.js";
 
-const FILTERS = { channel: "", language: "", status: "", gross: "", q: "" };
+const FILTERS = { channel: "", language: "", status: "", gross: "", appeal: "", q: "" };
 
 export function renderDatasets(root, { group } = {}) {
   const groupId = group || pref("group") || runtime.config?.default_group_id || "DEV";
@@ -120,6 +120,7 @@ function renderList(box, group, initialRows, refresh) {
     select("language", "Все языки", uniq("language").map((l) => [l, l])),
     select("status", "Любой статус", [["none", "Не оценён"], ["done", "Оценён"], ["partial", "Требует проверки"]]),
     select("gross", "Грубые ошибки: все", [["yes", "Есть грубая ошибка"], ["no", "Без грубых ошибок"]]),
+    select("appeal", "Апелляции: все", [["open", "Есть открытая апелляция"], ["any", "Есть апелляции"], ["none", "Без апелляций"]]),
     search);
 
   const stats = createStats(group);
@@ -156,6 +157,9 @@ function renderList(box, group, initialRows, refresh) {
       if (FILTERS.status && evalStatus(r) !== FILTERS.status) return false;
       if (FILTERS.gross === "yes" && !r.evaluation?.gross_error) return false;
       if (FILTERS.gross === "no" && r.evaluation?.gross_error) return false;
+      if (FILTERS.appeal === "open" && !r.evaluation?.open_appeals) return false;
+      if (FILTERS.appeal === "any" && !r.evaluation?.appeals_count) return false;
+      if (FILTERS.appeal === "none" && r.evaluation?.appeals_count) return false;
       if (FILTERS.q && !(`${r.conversation_id} ${r.preview}`.toLowerCase().includes(FILTERS.q))) return false;
       return true;
     });
@@ -179,6 +183,7 @@ function row(group, r, selected, onSelect) {
   const statusCell = h("td", {},
     st === "none" ? h("span", { class: "chip" }, "Не оценён")
       : h("span", { class: `chip chip-${st}` }, EVAL_STATUS[st] || st),
+    e?.open_appeals ? h("span", { class: "chip chip-review chip-block", title: "Открытые апелляции" }, `апелляций: ${e.open_appeals}`) : null,
     e?.gross_error ? h("span", { class: "badge-gross", title: (e.gross_types || []).map((g) => GROSS[g] || g).join(", ") }, "Грубая ошибка") : null);
   const tr = h("tr", { class: "row-link", tabindex: "0", onclick: () => (location.hash = href),
     onkeydown: (ev) => { if (ev.key === "Enter") location.hash = href; } },

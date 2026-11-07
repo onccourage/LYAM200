@@ -13,6 +13,7 @@ from pydantic import BaseModel, ValidationError
 from . import db
 from .config import settings
 from .dataset import DatasetError, LoadResult, load_dataset, load_upload
+from .appeals import AppealError, appeal_details, create_appeal, resolve_appeal
 from .batch import BatchManager
 from .evaluator import evaluate_conversation
 from .llm import LLMError, get_provider
@@ -197,6 +198,7 @@ def api_get_evaluation(group_id: str, conversation_id: str, raw: bool = False) -
         raise HTTPException(status_code=404, detail="Диалог ещё не оценён")
     if not raw:
         ev.pop("raw_responses", None)
+    ev["appeals"] = db.list_appeals(evaluation_id=ev["id"])
     return ev
 
 
@@ -279,6 +281,57 @@ async def api_resume_batch(job_id: int) -> dict:
         raise HTTPException(status_code=409, detail=f"Для набора уже идёт пакетная оценка #{active}")
     batches.resume(job_id)
     return db.get_batch_job(job_id)
+
+
+# ---------------------------------------------------------------- appeals
+
+class AppealCreate(BaseModel):
+    evaluation_id: int
+    criterion_id: str
+    comment: str
+    submitter_label: str | None = None
+
+
+class AppealResolve(BaseModel):
+    decision: str                        # confirmed | changed
+    reason: str
+    reviewer_label: str | None = None
+    new_answer: str | int | float | None = None
+    new_gross_types: list[str] | None = None
+
+
+def _appeal_call(fn, *args, **kwargs):
+    try:
+        return fn(*args, **kwargs)
+    except AppealError as e:
+        raise HTTPException(status_code=e.status, detail=str(e))
+
+
+@app.post("/api/appeals")
+def api_create_appeal(req: AppealCreate) -> dict:
+    return _appeal_call(create_appeal, req.evaluation_id, req.criterion_id, req.comment, req.submitter_label)
+
+
+@app.get("/api/appeals")
+def api_list_appeals(status: str | None = None, group_id: str | None = None) -> list[dict]:
+    return db.list_appeals(status=status, group_id=group_id)
+
+
+@app.get("/api/appeals/summary")
+def api_appeals_summary() -> dict:
+    return {"open": db.count_open_appeals()}
+
+
+@app.get("/api/appeals/{appeal_id}")
+def api_get_appeal(appeal_id: int) -> dict:
+    return _appeal_call(appeal_details, appeal_id)
+
+
+@app.post("/api/appeals/{appeal_id}/resolve")
+def api_resolve_appeal(appeal_id: int, req: AppealResolve) -> dict:
+    _appeal_call(resolve_appeal, appeal_id, req.decision, req.reason, req.reviewer_label,
+                 new_answer=req.new_answer, new_gross_types=req.new_gross_types)
+    return _appeal_call(appeal_details, appeal_id)
 
 
 # ---------------------------------------------------------------- static

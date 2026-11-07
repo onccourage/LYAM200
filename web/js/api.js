@@ -70,6 +70,11 @@ export const api = {
   listBatches: (groupId, limit = 1) => request("GET", "/batches", { query: { group_id: groupId, limit } }),
   cancelBatch: (id) => request("POST", `/batches/${id}/cancel`),
   resumeBatch: (id) => request("POST", `/batches/${id}/resume`),
+  createAppeal: (payload) => request("POST", "/appeals", { body: payload }),
+  listAppeals: (status, groupId) => request("GET", "/appeals", { query: { status, group_id: groupId } }),
+  appealsSummary: () => request("GET", "/appeals/summary"),
+  getAppeal: (id) => request("GET", `/appeals/${id}`),
+  resolveAppeal: (id, payload) => request("POST", `/appeals/${id}/resolve`, { body: payload }),
   listChecklists: () => request("GET", "/checklists"),
   getChecklist: (id, version) => request("GET", `/checklists/${enc(id)}`, { query: { version } }),
 };

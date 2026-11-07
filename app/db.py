@@ -64,6 +64,8 @@ CREATE TABLE IF NOT EXISTS evaluations (
     cost               TEXT NOT NULL DEFAULT '0',
     raw_responses_json TEXT,
     is_current         INTEGER NOT NULL DEFAULT 1,
+    original_total     TEXT,               -- итог модели до решений по апелляциям
+    updated_at         TEXT,
     created_at         TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_eval_conv ON evaluations(group_id, conversation_id, is_current);
@@ -104,18 +106,26 @@ CREATE TABLE IF NOT EXISTS batch_jobs (
 CREATE TABLE IF NOT EXISTS appeals (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
     evaluation_id    INTEGER NOT NULL REFERENCES evaluations(id),
+    group_id         TEXT NOT NULL,
+    conversation_id  TEXT NOT NULL,
     criterion_id     TEXT NOT NULL,
     comment          TEXT NOT NULL,
+    submitter_label  TEXT,
     status           TEXT NOT NULL DEFAULT 'open',   -- open | resolved
-    original_answer  TEXT,
+    original_answer  TEXT,                            -- NULL = критерий был needs_review
     original_points  TEXT,
+    original_total   TEXT,                            -- итог диалога на момент подачи
     decision         TEXT,                            -- confirmed | changed
     new_answer       TEXT,
+    new_gross_types  TEXT,                            -- JSON, только для flag
+    new_points       TEXT,
+    final_total      TEXT,                            -- итог после решения
     reason           TEXT,
     reviewer_label   TEXT,
     created_at       TEXT NOT NULL,
     resolved_at      TEXT
 );
+CREATE INDEX IF NOT EXISTS ix_appeals_eval ON appeals(evaluation_id, criterion_id, status);
 """
 
 
@@ -140,10 +150,23 @@ def connect(path: Path | None = None) -> Iterator[sqlite3.Connection]:
         conn.close()
 
 
+# колонки, добавленные после первых версий схемы: (таблица, колонка, тип)
+MIGRATIONS = [
+    ("evaluations", "original_total", "TEXT"), ("evaluations", "updated_at", "TEXT"),
+    ("appeals", "group_id", "TEXT"), ("appeals", "conversation_id", "TEXT"), ("appeals", "submitter_label", "TEXT"),
+    ("appeals", "original_total", "TEXT"), ("appeals", "new_gross_types", "TEXT"), ("appeals", "new_points", "TEXT"),
+    ("appeals", "final_total", "TEXT"),
+]
+
+
 def init_db(path: Path | None = None) -> None:
     with connect(path) as conn:
         conn.execute("PRAGMA journal_mode = WAL")
         conn.executescript(SCHEMA)
+        for table, col, typ in MIGRATIONS:
+            cols = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+            if col not in cols:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
 
 
 # ---------------------------------------------------------------- наборы и диалоги
@@ -376,8 +399,10 @@ def list_current_evaluations(group_id: str, path: Path | None = None) -> list[di
     with connect(path) as conn:
         rows = conn.execute(
             "SELECT id, group_id, conversation_id, checklist_id, checklist_version, model, prompt_version, status, "
-            "total, gross_error, tokens_in, tokens_out, llm_calls, cost, created_at, score_json FROM evaluations "
-            "WHERE group_id=? AND is_current=1", (group_id,),
+            "total, original_total, gross_error, tokens_in, tokens_out, llm_calls, cost, created_at, score_json, "
+            "(SELECT COUNT(*) FROM appeals a WHERE a.evaluation_id=e.id AND a.status='open') AS open_appeals, "
+            "(SELECT COUNT(*) FROM appeals a WHERE a.evaluation_id=e.id) AS appeals_count "
+            "FROM evaluations e WHERE group_id=? AND is_current=1", (group_id,),
         ).fetchall()
     out = []
     for r in rows:
@@ -479,3 +504,67 @@ def dataset_stats(group_id: str, path: Path | None = None) -> dict:
         "avg_tokens_out": round(sum(r["tokens_out"] for r in full_runs) / len(full_runs)) if full_runs else None,
         "evaluations_total": len(hist),
     }
+
+
+# ---------------------------------------------------------------- апелляции
+
+def update_evaluation_result(evaluation_id: int, *, answers: list, score: dict, total: str | None, gross_error: bool,
+                             status: str, original_total: str | None, path: Path | None = None,
+                             conn: sqlite3.Connection | None = None) -> None:
+    sql = ("UPDATE evaluations SET answers_json=?, score_json=?, total=?, gross_error=?, status=?, "
+           "original_total=COALESCE(original_total, ?), updated_at=? WHERE id=?")
+    args = (json.dumps(answers, ensure_ascii=False), json.dumps(score, ensure_ascii=False), total,
+            int(bool(gross_error)), status, original_total, now_iso(), evaluation_id)
+    if conn is not None:
+        conn.execute(sql, args)
+    else:
+        with connect(path) as c:
+            c.execute(sql, args)
+
+
+def _appeal_row(r: sqlite3.Row) -> dict:
+    d = dict(r)
+    d["new_gross_types"] = json.loads(d["new_gross_types"]) if d.get("new_gross_types") else []
+    return d
+
+
+def insert_appeal(rec: dict, path: Path | None = None) -> int:
+    with connect(path) as conn:
+        dup = conn.execute("SELECT id FROM appeals WHERE evaluation_id=? AND criterion_id=? AND status='open'",
+                           (rec["evaluation_id"], rec["criterion_id"])).fetchone()
+        if dup:
+            raise ValueError(f"по этому критерию уже есть открытая апелляция #{dup['id']}")
+        cur = conn.execute(
+            "INSERT INTO appeals(evaluation_id, group_id, conversation_id, criterion_id, comment, submitter_label, status, "
+            "original_answer, original_points, original_total, created_at) VALUES (?,?,?,?,?,?,'open',?,?,?,?)",
+            (rec["evaluation_id"], rec["group_id"], rec["conversation_id"], rec["criterion_id"], rec["comment"],
+             rec.get("submitter_label"), rec.get("original_answer"), rec.get("original_points"),
+             rec.get("original_total"), now_iso()),
+        )
+        return cur.lastrowid
+
+
+def get_appeal(appeal_id: int, path: Path | None = None) -> dict | None:
+    with connect(path) as conn:
+        r = conn.execute("SELECT * FROM appeals WHERE id=?", (appeal_id,)).fetchone()
+    return _appeal_row(r) if r else None
+
+
+def list_appeals(status: str | None = None, group_id: str | None = None, evaluation_id: int | None = None,
+                 path: Path | None = None) -> list[dict]:
+    q, args = "SELECT * FROM appeals WHERE 1=1", []
+    if status:
+        q += " AND status=?"; args.append(status)
+    if group_id:
+        q += " AND group_id=?"; args.append(group_id)
+    if evaluation_id is not None:
+        q += " AND evaluation_id=?"; args.append(evaluation_id)
+    q += " ORDER BY (status='open') DESC, id DESC"
+    with connect(path) as conn:
+        rows = conn.execute(q, args).fetchall()
+    return [_appeal_row(r) for r in rows]
+
+
+def count_open_appeals(path: Path | None = None) -> int:
+    with connect(path) as conn:
+        return conn.execute("SELECT COUNT(*) FROM appeals WHERE status='open'").fetchone()[0]

@@ -17,3 +17,15 @@ export function answerLabel(answer, type) {
   if (answer === "no") return "Нет";
   return answer;
 }
+
+export const DECISION = { confirmed: "Подтверждено", changed: "Изменено" };
+
+/** Допустимые ответы критерия для формы решения: [value, label]. Берутся из конфигурации критерия. */
+export function answerOptions(c) {
+  let opts;
+  if (c.type === "scale") opts = [...c.scale].sort((a, b) => b.value - a.value).map((s) => [String(s.value), `${s.value} — ${s.label}`]);
+  else if (c.type === "flag") opts = [["yes", "Нарушение есть"], ["no", "Нарушения нет"]];
+  else opts = [["yes", "Да"], ["no", "Нет"]];
+  if (c.na_allowed) opts.push(["na", `N/A — ${c.na_condition || "неприменимо"}`]);
+  return opts;
+}

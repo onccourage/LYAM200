@@ -18,3 +18,10 @@ export function setPref(name, value) {
 }
 
 export const runtime = { config: null };
+
+// Роль без авторизации: «Контролёр» подаёт апелляции, «Проверяющий» их рассматривает.
+export const ROLES = { controller: "Контролёр", reviewer: "Проверяющий" };
+export function role() {
+  const r = pref("role", "controller");
+  return ROLES[r] ? r : "controller";
+}

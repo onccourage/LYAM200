@@ -1,9 +1,13 @@
 // Панель результата: итог, секции, грубая ошибка, метаданные, критерии с доказательствами.
 // Все числа — строки, посчитанные бэкендом (scoring.py). Фронтенд ничего не округляет и не считает.
-import { fmtDate, fmtSec, h } from "../dom.js";
-import { GROSS, LOW_CONFIDENCE, answerLabel } from "../labels.js";
+import { api } from "../api.js";
+import { fmtDate, fmtSec, h, toast } from "../dom.js";
+import { DECISION, GROSS, LOW_CONFIDENCE, answerLabel } from "../labels.js";
+import { pref, role, setPref } from "../state.js";
 
-export function createEvaluationPanel({ evaluation, checklist, latestVersion, conversation, transcript, onReevaluate }) {
+export function createEvaluationPanel({ evaluation, checklist, latestVersion, conversation, transcript, onReevaluate, onChanged }) {
+  const appeals = evaluation.appeals || [];
+  const ctx = { evaluation, appeals, onChanged, role: role() };
   const score = evaluation.score || {};
   const rows = new Map((score.criteria || []).map((c) => [c.criterion_id, c]));
   const verdicts = new Map((evaluation.answers || []).map((v) => [v.criterion_id, v]));
@@ -16,7 +20,9 @@ export function createEvaluationPanel({ evaluation, checklist, latestVersion, co
   const summary = h("div", { class: "summary" },
     h("div", { class: "total" },
       h("div", { class: "total-value" }, total ?? "—"),
-      h("div", { class: "total-label" }, total === null || total === undefined ? "не рассчитывается: нет применимых критериев" : "из 100")),
+      h("div", { class: "total-label" }, total === null || total === undefined ? "не рассчитывается: нет применимых критериев" : "из 100"),
+      evaluation.original_total !== null && evaluation.original_total !== undefined && evaluation.original_total !== total
+        ? h("div", { class: "orig-total", title: "Итог модели до решений по апелляциям" }, `модель: ${evaluation.original_total} → после апелляций: ${total ?? "—"}`) : null),
     h("div", { class: "summary-side" },
       score.gross_error ? grossBadge(score, verdicts, transcript) : null,
       pending.length ? h("div", { class: "alert alert-warn small" },
@@ -50,11 +56,71 @@ export function createEvaluationPanel({ evaluation, checklist, latestVersion, co
   const groups = order.map((sid) => [sid, crits.filter((c) => c.section === sid)]).filter(([, cs]) => cs.length);
   const criteriaEl = h("div", { class: "criteria" }, groups.map(([sid, cs]) =>
     h("div", { class: "crit-group" }, h("h3", { class: "crit-group-title" }, sectionTitles.get(sid) || sid),
-      cs.map((c) => criterionCard(c, verdicts.get(c.id), rows.get(c.id), messages, transcript)))));
+      cs.map((c) => criterionCard(c, verdicts.get(c.id), rows.get(c.id), messages, transcript, ctx)))));
+
+  const titles = new Map(checklist.criteria.map((c) => [c.id, `${c.code || c.id} ${c.title}`]));
+  const history = appeals.length ? h("div", { class: "history" },
+    h("h3", { class: "crit-group-title" }, "История апелляций"),
+    h("ol", { class: "history-list" }, appeals.map((a) => h("li", {},
+      h("a", { href: `#/a/${a.id}` }, `#${a.id}`), " ",
+      h("strong", {}, titles.get(a.criterion_id) || a.criterion_id), " · ",
+      a.status === "open" ? h("span", { class: "chip chip-partial" }, "на рассмотрении")
+        : [h("span", { class: `chip ${a.decision === "changed" ? "chip-mid" : "chip-na"}` }, DECISION[a.decision]),
+          ` было ${answerText(a.original_answer)} → стало ${answerText(a.new_answer)}; итог ${a.original_total ?? "—"} → ${a.final_total ?? "—"}`],
+      h("div", { class: "muted small" },
+        `Подал${a.submitter_label ? `: ${a.submitter_label}` : "о"} ${fmtDate(a.created_at)} — «${a.comment}»`,
+        a.status === "resolved" ? ` · Решил${a.reviewer_label ? `: ${a.reviewer_label}` : "о"} ${fmtDate(a.resolved_at)} — «${a.reason}»` : ""))))) : null;
 
   return h("section", { class: "panel eval-panel" },
-    h("div", { class: "panel-head" }, h("h2", {}, "Оценка")),
-    summary, sections, criteriaEl);
+    h("div", { class: "panel-head" }, h("h2", {}, "Оценка"),
+      !evaluation.is_current ? h("span", { class: "chip chip-bad" }, "устаревшая оценка") : null),
+    summary, sections, criteriaEl, history);
+}
+
+function answerText(a) {
+  if (a === null || a === undefined) return "«требует проверки»";
+  return { yes: "Да", no: "Нет", na: "N/A" }[a] || a;
+}
+
+function appealBlock(c, v, ctx) {
+  const mine = ctx.appeals.filter((a) => a.criterion_id === c.id);
+  const open = mine.find((a) => a.status === "open");
+  const resolved = mine.filter((a) => a.status === "resolved");
+  const out = [];
+  for (const a of resolved) {
+    out.push(h("div", { class: `appeal-note ${a.decision === "changed" ? "appeal-changed" : ""}` },
+      h("a", { href: `#/a/${a.id}` }, `Апелляция #${a.id}`), ": ",
+      a.decision === "changed"
+        ? `изменено ${answerText(a.original_answer)} → ${answerText(a.new_answer)}${a.new_points ? ` (${a.original_points ?? "—"} → ${a.new_points} б.)` : ""}`
+        : "оценка подтверждена",
+      h("div", { class: "muted small" }, `Причина: ${a.reason}`)));
+  }
+  if (open) {
+    out.push(h("div", { class: "appeal-note appeal-open" },
+      h("a", { href: `#/a/${open.id}` }, `Апелляция #${open.id}`), " на рассмотрении: ",
+      h("span", { class: "muted" }, `«${open.comment}»`)));
+  } else if (ctx.role === "controller" && v && ctx.evaluation.is_current) {
+    const box = h("div", { class: "appeal-form", hidden: true });
+    const btn = h("button", { class: "btn btn-sm btn-ghost appeal-btn", type: "button",
+      onclick: () => { box.hidden = !box.hidden; if (!box.hidden) box.querySelector("textarea").focus(); } }, "Подать апелляцию");
+    const text = h("textarea", { class: "input textarea", rows: "3", placeholder: "Почему оценка неверна? (обязательно)" });
+    const name = h("input", { class: "input input-sm", placeholder: "Ваше имя (необязательно)", value: pref("name", "") });
+    const send = h("button", { class: "btn btn-sm btn-primary", type: "button", onclick: async () => {
+      if (!text.value.trim()) { text.focus(); toast("Комментарий обязателен", "error"); return; }
+      send.disabled = true;
+      try {
+        setPref("name", name.value.trim() || null);
+        const a = await api.createAppeal({ evaluation_id: ctx.evaluation.id, criterion_id: c.id,
+          comment: text.value.trim(), submitter_label: name.value.trim() || null });
+        toast(`Апелляция #${a.id} подана`, "ok");
+        document.dispatchEvent(new CustomEvent("appeals-changed"));
+        ctx.onChanged && ctx.onChanged();
+      } catch (e) { toast(e.message, "error"); send.disabled = false; }
+    } }, "Отправить");
+    box.append(text, h("div", { class: "appeal-form-row" }, name, send));
+    out.push(btn, box);
+  }
+  return out;
 }
 
 function metaRow(label, value, extra) {
@@ -101,7 +167,7 @@ function pointsLine(c, row) {
   return null;
 }
 
-function criterionCard(c, v, row, messages, transcript) {
+function criterionCard(c, v, row, messages, transcript, ctx) {
   const low = v && v.status === "ok" && v.confidence !== null && v.confidence !== undefined && v.confidence < LOW_CONFIDENCE;
   const classes = ["crit"];
   if (!v || v.status === "needs_review") classes.push("crit-review");
@@ -134,6 +200,7 @@ function criterionCard(c, v, row, messages, transcript) {
       v.review_reason || "Требует ручной проверки",
       (v.validation_errors || []).length ? h("ul", { class: "errors" }, v.validation_errors.map((e) => h("li", {}, e))) : null) : null,
     c.type === "flag" && v?.gross_types?.length ? h("div", { class: "gross-types" }, v.gross_types.map((g) => GROSS[g] || g).join(", ")) : null,
+    appealBlock(c, v, ctx),
   ];
 
   return h("article", { class: classes.join(" "), id: `crit-${c.id}` },
@@ -145,7 +212,7 @@ function criterionCard(c, v, row, messages, transcript) {
     pointsLine(c, row),
     body,
     h("footer", { class: "crit-foot muted small" },
-      v?.source === "cache" ? "из кэша" : v?.source === "rule" ? "правило без LLM" : v?.source === "appeal" ? "по апелляции" : "",
+      v?.source === "cache" ? "из кэша" : v?.source === "rule" ? "правило без LLM" : v?.source === "appeal" ? "решение проверяющего" : "",
       v?.confidence !== null && v?.confidence !== undefined
         ? h("span", { class: low ? "low-conf" : "" }, ` уверенность ${Math.round(v.confidence * 100)}%${low ? " — низкая" : ""}`) : null));
 }
