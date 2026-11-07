@@ -2,6 +2,7 @@
 import { api } from "./api.js";
 import { h } from "./dom.js";
 import { ROLES, pref, role, runtime, setPref } from "./state.js";
+import { renderAnalytics } from "./components/analytics.js";
 import { renderAppeal, renderAppealsList } from "./components/appeals.js";
 import { renderChecklistEditor } from "./components/checklist.js";
 import { renderConversation } from "./components/conversation.js";
@@ -15,6 +16,7 @@ function parseRoute() {
   if (parts[0] === "d" && parts[1]) return { name: "datasets", group: parts[1] };
   if (parts[0] === "appeals") return { name: "appeals", status: parts[1] || "open" };
   if (parts[0] === "a" && parts[1]) return { name: "appeal", id: Number(parts[1]) };
+  if (parts[0] === "analytics") return { name: "analytics", group: parts[1] };
   if (parts[0] === "checklist") return { name: "checklist", id: parts[1], version: parts[2] ? Number(parts[2]) : undefined };
   return { name: "datasets" };
 }
@@ -32,6 +34,7 @@ function route(force = false) {
   else if (r.name === "appeals") renderAppealsList(view, r);
   else if (r.name === "appeal") renderAppeal(view, r);
   else if (r.name === "checklist") renderChecklistEditor(view, r);
+  else if (r.name === "analytics") renderAnalytics(view, r);
   else renderDatasets(view, r);
 }
 
@@ -43,7 +46,8 @@ function renderNav(r) {
   nav.replaceChildren(
     h("a", { href: `#/d/${encodeURIComponent(group)}`, class: r.name === "datasets" || r.name === "conversation" ? "active" : "" }, "Наборы и диалоги"),
     appealsLink,
-    h("a", { href: "#/checklist", class: r.name === "checklist" ? "active" : "" }, "Чек-лист"));
+    h("a", { href: "#/checklist", class: r.name === "checklist" ? "active" : "" }, "Чек-лист"),
+    h("a", { href: `#/analytics/${encodeURIComponent(group)}`, class: r.name === "analytics" ? "active" : "" }, "Аналитика"));
   refreshAppealsCount();
 }
 

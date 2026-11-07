@@ -14,6 +14,7 @@ from . import db
 from .config import settings
 from .dataset import DatasetError, LoadResult, load_dataset, load_upload
 from .audio import AudioError, resolve_audio_url
+from .analytics import compute as compute_analytics
 from .appeals import AppealError, appeal_details, create_appeal, resolve_appeal
 from .batch import BatchManager
 from .checklists import diff as checklist_diff
@@ -234,6 +235,11 @@ def api_get_evaluation(group_id: str, conversation_id: str, raw: bool = False) -
 @app.get("/api/datasets/{group_id}/evaluations")
 def api_list_evaluations(group_id: str) -> list[dict]:
     return db.list_current_evaluations(group_id)
+
+
+@app.get("/api/datasets/{group_id}/analytics")
+def api_analytics(group_id: str, checklist_id: str | None = None) -> dict:
+    return compute_analytics(group_id, checklist_id)
 
 
 @app.get("/api/datasets/{group_id}/stats")
