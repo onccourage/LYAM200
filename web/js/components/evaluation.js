@@ -34,7 +34,8 @@ export function createEvaluationPanel({ evaluation, checklist, active, conversat
             active.id === evaluation.checklist_id ? `текущая v${active.version}` : `выбран «${active.name}» v${active.version}`) : null),
         metaRow("Модель", `${evaluation.model} · промпт ${evaluation.prompt_version}`),
         metaRow("Стоимость", `$${evaluation.cost} · вызовов LLM: ${evaluation.llm_calls} · токены ${evaluation.tokens_in}/${evaluation.tokens_out}`),
-        metaRow("Оценено", fmtDate(evaluation.created_at))),
+        metaRow("Оценено", fmtDate(evaluation.created_at),
+          evaluation.origin === "seed" ? h("span", { class: "chip chip-partial", title: "Оценка не делалась на этой машине — загружена из data/seed (предрасчитано)" }, "из сида") : null)),
       h("div", { class: "actions" },
         h("button", { class: `btn ${outdated ? "btn-primary" : ""}`, type: "button", onclick: () => onReevaluate({ full: false }),
           title: "Оценить последней версией выбранного чек-листа; неизменённые критерии берутся из кэша" },
@@ -76,7 +77,39 @@ export function createEvaluationPanel({ evaluation, checklist, active, conversat
   return h("section", { class: "panel eval-panel" },
     h("div", { class: "panel-head" }, h("h2", {}, "Оценка"),
       !evaluation.is_current ? h("span", { class: "chip chip-bad" }, "устаревшая оценка") : null),
-    summary, sections, criteriaEl, history);
+    summary, sections, criteriaEl, history, provenance(evaluation, conversation));
+}
+
+// Происхождение оценки: что именно отправлено модели и что она ответила (прозрачность процесса).
+function provenance(evaluation, conversation) {
+  const out = h("div", { class: "prov-body" });
+  const load = (fn) => async () => {
+    out.replaceChildren(h("div", { class: "muted small" }, "Загрузка…"));
+    try { out.replaceChildren(...await fn()); } catch (e) { out.replaceChildren(h("div", { class: "alert alert-error small" }, e.message)); }
+  };
+  const g = conversation.group_id, c = conversation.conversation_id;
+  const pre = (obj) => h("pre", { class: "raw" }, typeof obj === "string" ? obj : JSON.stringify(obj, null, 2));
+  return h("details", { class: "provenance" },
+    h("summary", {}, "Происхождение оценки: промпт и сырой ответ модели"),
+    h("div", { class: "muted small" },
+      `${evaluation.origin === "seed" ? "Загружено из сида (оценено заранее). " : "Оценено на этом сервере. "}` +
+      `Модель ${evaluation.model}, рамка промпта ${evaluation.prompt_version}, вызовов LLM ${evaluation.llm_calls}, токены ${evaluation.tokens_in}/${evaluation.tokens_out}. ` +
+      "Критерии из кэша не вызывали модель повторно — их исходный ответ в той оценке, где они считались."),
+    h("div", { class: "actions" },
+      h("button", { class: "btn btn-sm", type: "button", onclick: load(async () => {
+        const ev = await api.getEvaluation(g, c, true);
+        if (!ev.raw_responses?.length) return [h("div", { class: "muted small" }, "Сырых ответов нет: все критерии взяты из кэша или правилами.")];
+        return ev.raw_responses.map((r, i) => h("div", {},
+          h("div", { class: "small" }, h("strong", {}, `Вызов ${i + 1}`), ` · критерии: ${(r.criteria || []).join(", ")}${r.retry ? " · повтор после ошибок проверки" : ""}`,
+            r.usage ? ` · токены ${r.usage.input_tokens}/${r.usage.output_tokens}` : "", r.error ? ` · ошибка: ${r.error}` : ""),
+          pre(r.data ?? r.error ?? r)));
+      }) }, "Сырой ответ модели"),
+      h("button", { class: "btn btn-sm", type: "button", onclick: load(async () => {
+        const p = await api.getEvaluationPrompt(g, c);
+        return [h("div", { class: "muted small" }, p.note), h("div", { class: "small" }, h("strong", {}, "System")), pre(p.system),
+          h("div", { class: "small" }, h("strong", {}, "User")), pre(p.user), h("div", { class: "small" }, h("strong", {}, "JSON-схема ответа")), pre(p.schema)];
+      }) }, "Промпт")),
+    out);
 }
 
 function answerText(a) {

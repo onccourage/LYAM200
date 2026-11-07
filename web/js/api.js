@@ -60,7 +60,8 @@ export const api = {
     form.append("group_id", groupId);
     return request("POST", "/conversations/upload", { form });
   },
-  getEvaluation: (groupId, convId) => request("GET", `/evaluations/${enc(groupId)}/${enc(convId)}`),
+  getEvaluation: (groupId, convId, raw = false) => request("GET", `/evaluations/${enc(groupId)}/${enc(convId)}`, { query: raw ? { raw: true } : undefined }),
+  getEvaluationPrompt: (groupId, convId) => request("GET", `/evaluations/${enc(groupId)}/${enc(convId)}/prompt`),
   evaluate: (groupId, convId, { checklistId, checklistVersion, full = false } = {}) =>
     request("POST", `/evaluations/${enc(groupId)}/${enc(convId)}`,
       { query: { checklist_id: checklistId, checklist_version: checklistVersion, full } }),

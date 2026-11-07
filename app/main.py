@@ -232,6 +232,24 @@ def api_get_evaluation(group_id: str, conversation_id: str, raw: bool = False) -
     return ev
 
 
+@app.get("/api/evaluations/{group_id}/{conversation_id}/prompt")
+def api_evaluation_prompt(group_id: str, conversation_id: str) -> dict:
+    """Промпт, по которому модель оценивала диалог: рамка + критерии версии чек-листа + факты + транскрипт."""
+    from .preprocess import preprocess
+    from .prompt_builder import PROMPT_VERSION, build_request
+    from .scoring import applies_to_channel
+    ev = db.get_current_evaluation(group_id, conversation_id)
+    conv = db.get_conversation(group_id, conversation_id)
+    if ev is None or conv is None:
+        raise HTTPException(status_code=404, detail="Диалог ещё не оценён")
+    cl = db.get_checklist(ev["checklist_id"], ev["checklist_version"])
+    crit = [c for c in cl.enabled_criteria if applies_to_channel(c, conv.channel) and not c.requires_audio]
+    req = build_request(preprocess(conv), crit)
+    return {**req, "prompt_version": PROMPT_VERSION, "evaluated_with": ev["prompt_version"],
+            "note": "Восстановлен из версии чек-листа и транскрипта" + (
+                "" if ev["prompt_version"] == PROMPT_VERSION else f"; оценка сделана рамкой {ev['prompt_version']}")}
+
+
 @app.get("/api/datasets/{group_id}/evaluations")
 def api_list_evaluations(group_id: str) -> list[dict]:
     return db.list_current_evaluations(group_id)

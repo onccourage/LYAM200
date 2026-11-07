@@ -1,7 +1,7 @@
 """Сид предрасчитанных оценок: демо работает без API модели.
 
 data/seed/{group_id}.json содержит версии чек-листа, которыми оценивали, текущие оценки набора
-(без сырых ответов модели — они остаются в исходной БД) и кэш критериев (чтобы переоценка после
+(вместе с сырыми ответами модели — для прозрачности) и кэш критериев (чтобы переоценка после
 замены критерия отправляла в LLM только изменённые критерии и на свежей машине).
 Транскрипты берутся из data/cache/{group_id}.json.
 """
@@ -31,7 +31,8 @@ def export_seed(group_id: str, out: Path | None = None, *, db_path: Path | None 
     with db.connect(db_path) as conn:
         cache = [dict(r) for r in conn.execute("SELECT cache_key, criterion_id, answer_json FROM criterion_cache")]
     keep = ("conversation_id", "checklist_id", "checklist_version", "model", "prompt_version", "status", "total",
-            "original_total", "gross_error", "answers", "score", "tokens_in", "tokens_out", "llm_calls", "cost", "created_at")
+            "original_total", "gross_error", "answers", "score", "tokens_in", "tokens_out", "llm_calls", "cost", "created_at",
+            "raw_responses")
     doc = {
         "format": FORMAT,
         "group_id": group_id,
@@ -79,7 +80,8 @@ def import_seed(path: Path, *, db_path: Path | None = None, cache_dir: Path | No
         if cur and cur["checklist_id"] == e["checklist_id"] and cur["checklist_version"] == e["checklist_version"]:
             skipped += 1  # уже есть оценка этой версией — не дублируем
             continue
-        db.save_evaluation({**e, "group_id": group, "raw_responses": [], "seeded": True}, path=db_path)
+        db.save_evaluation({**e, "group_id": group, "raw_responses": e.get("raw_responses") or [], "origin": "seed"},
+                           path=db_path)
         imported += 1
     db.cache_put_many([(c["cache_key"], c["criterion_id"], c["answer"]) for c in doc["criterion_cache"]], path=db_path)
     return {"group_id": group, "checklist_versions": loaded_versions, "evaluations": imported, "skipped": skipped,

@@ -26,6 +26,8 @@ def _path(value: str) -> Path:
 @dataclass
 class Settings:
     anthropic_api_key: str = field(default_factory=lambda: _env("ANTHROPIC_API_KEY"))
+    # явный адрес Anthropic API: посторонняя ANTHROPIC_BASE_URL в окружении не уведёт запросы
+    anthropic_api_base: str = field(default_factory=lambda: _env("ANTHROPIC_API_BASE", "https://api.anthropic.com"))
     llm_provider: str = field(default_factory=lambda: _env("LLM_PROVIDER", "anthropic"))
     llm_model: str = field(default_factory=lambda: _env("LLM_MODEL", "claude-sonnet-5-5"))
     llm_base_url: str = field(default_factory=lambda: _env("LLM_BASE_URL"))
@@ -52,7 +54,7 @@ class Settings:
     price_cache_write_mult: Decimal = field(default_factory=lambda: Decimal(_env("PRICE_CACHE_WRITE_MULT", "1.25")))
     price_cache_read_mult: Decimal = field(default_factory=lambda: Decimal(_env("PRICE_CACHE_READ_MULT", "0.1")))
 
-    seed_on_start: bool = field(default_factory=lambda: _env("SEED_ON_START", "1") not in ("0", "false", "no"))
+    seed_on_start: bool = field(default_factory=lambda: _env("SEED_ON_START", "0") in ("1", "true", "yes"))
     db_path: Path = field(default_factory=lambda: _path(_env("DB_PATH", "data/cqa.db")))
     data_dir: Path = ROOT_DIR / "data"
     web_dir: Path = ROOT_DIR / "web"

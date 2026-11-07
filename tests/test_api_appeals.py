@@ -3,6 +3,10 @@ def test_appeal_http_flow(api_client):
     ev = c.post("/api/evaluations/MOCK/mock-ru-001").json()
     assert ev["total"] == "100.00"
     calls = len(c.fake.requests)
+    pr = c.get("/api/evaluations/MOCK/mock-ru-001/prompt").json()
+    assert "[c01]" in pr["system"] and "<transcript>" in pr["user"] and "c08" in pr["schema"]["properties"]
+    assert c.get("/api/evaluations/MOCK/mock-ru-001", params={"raw": True}).json()["raw_responses"][0]["data"]["c01"]
+    assert c.get("/api/datasets/MOCK/conversations").json()[3]["evaluation"]["origin"] == "live"
 
     assert c.post("/api/appeals", json={"evaluation_id": ev["id"], "criterion_id": "c01", "comment": ""}).status_code == 400
     r = c.post("/api/appeals", json={"evaluation_id": ev["id"], "criterion_id": "c07", "comment": "Не попрощался"})

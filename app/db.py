@@ -156,6 +156,7 @@ MIGRATIONS = [
     ("appeals", "group_id", "TEXT"), ("appeals", "conversation_id", "TEXT"), ("appeals", "submitter_label", "TEXT"),
     ("appeals", "original_total", "TEXT"), ("appeals", "new_gross_types", "TEXT"), ("appeals", "new_points", "TEXT"),
     ("appeals", "final_total", "TEXT"),
+    ("evaluations", "origin", "TEXT NOT NULL DEFAULT 'live'"),   # live — оценено здесь; seed — загружено из сида
 ]
 
 
@@ -365,7 +366,7 @@ def save_evaluation(rec: dict, path: Path | None = None) -> int:
         cur = conn.execute(
             "INSERT INTO evaluations(group_id, conversation_id, checklist_id, checklist_version, model, prompt_version, "
             "status, total, gross_error, answers_json, score_json, tokens_in, tokens_out, llm_calls, cost, "
-            "raw_responses_json, is_current, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?)",
+            "raw_responses_json, is_current, created_at, origin) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?)",
             (
                 rec["group_id"], rec["conversation_id"], rec["checklist_id"], rec["checklist_version"],
                 rec.get("model"), rec.get("prompt_version"), rec["status"],
@@ -373,7 +374,7 @@ def save_evaluation(rec: dict, path: Path | None = None) -> int:
                 json.dumps(rec["answers"], ensure_ascii=False),
                 json.dumps(rec.get("score"), ensure_ascii=False),
                 rec.get("tokens_in", 0), rec.get("tokens_out", 0), rec.get("llm_calls", 0), str(rec.get("cost", "0")),
-                json.dumps(rec.get("raw_responses", []), ensure_ascii=False), now_iso(),
+                json.dumps(rec.get("raw_responses", []), ensure_ascii=False), now_iso(), rec.get("origin", "live"),
             ),
         )
         return cur.lastrowid
@@ -409,7 +410,7 @@ def list_current_evaluations(group_id: str, path: Path | None = None) -> list[di
     with connect(path) as conn:
         rows = conn.execute(
             "SELECT id, group_id, conversation_id, checklist_id, checklist_version, model, prompt_version, status, "
-            "total, original_total, gross_error, tokens_in, tokens_out, llm_calls, cost, created_at, score_json, "
+            "total, original_total, gross_error, tokens_in, tokens_out, llm_calls, cost, created_at, origin, score_json, "
             "(SELECT COUNT(*) FROM appeals a WHERE a.evaluation_id=e.id AND a.status='open') AS open_appeals, "
             "(SELECT COUNT(*) FROM appeals a WHERE a.evaluation_id=e.id) AS appeals_count "
             "FROM evaluations e WHERE group_id=? AND is_current=1", (group_id,),

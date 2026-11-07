@@ -24,7 +24,7 @@ def test_export_import_roundtrip(tmp_path, mock_payload, default_checklist_dict,
     seed = export_seed("MOCK", tmp_path / "seed" / "MOCK.json", db_path=src)
     doc = json.loads(seed.read_text())
     assert [c["version"] for c in doc["checklists"]] == [2] and len(doc["evaluations"]) == 4
-    assert "raw_responses" not in doc["evaluations"][0] and doc["criterion_cache"]
+    assert doc["evaluations"][0]["raw_responses"] and doc["criterion_cache"]   # сырые ответы — для прозрачности
 
     # чистая БД, транскрипты из кэша набора
     cache_dir = tmp_path / "cache"
@@ -37,6 +37,8 @@ def test_export_import_roundtrip(tmp_path, mock_payload, default_checklist_dict,
     assert r["evaluations"] == 4 and r["checklist_versions"] == 1
     e = db.get_current_evaluation("MOCK", "mock-ru-001", path=dst)
     assert e["checklist_version"] == 2 and e["total"] == "95.50" and e["answers"][0]["evidence"]
+    assert e["origin"] == "seed" and e["raw_responses"]
+    assert {r["origin"] for r in db.list_current_evaluations("MOCK", path=dst)} == {"seed"}
     assert db.get_checklist("default_chat", path=dst).version == 2
     assert import_seed(seed, db_path=dst, cache_dir=cache_dir)["evaluations"] == 0   # повторно не дублирует
 
@@ -45,6 +47,8 @@ def test_export_import_roundtrip(tmp_path, mock_payload, default_checklist_dict,
     conv = db.get_conversation("MOCK", "mock-ru-001", path=dst)
     out = asyncio.run(evaluate_conversation(conv, db.get_checklist("default_chat", 2, path=dst), p, db_path=dst))
     assert p.requests == [] and out.record["total"] == "95.50"
+    assert db.get_current_evaluation("MOCK", "mock-ru-001", path=dst)["origin"] == "live"   # оценено здесь
+    assert config.settings.seed_on_start is False   # по умолчанию сид не подгружается сам
 
     # автозагрузка: только в пустую БД
     monkeypatch.setattr(config.settings, "data_dir", tmp_path)

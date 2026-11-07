@@ -286,6 +286,14 @@ h1, h2, h3 { margin: 0; line-height: 1.25; }
 .apply .chip { margin-left: 6px; }
 .apply-row .input { flex: 1; min-width: 0; }
 
+/* ---------- provenance */
+.provenance { border-top: 1px solid var(--border); padding-top: 10px; }
+.provenance summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+.provenance[open] { display: flex; flex-direction: column; gap: 8px; }
+.prov-body { display: flex; flex-direction: column; gap: 8px; }
+.raw { margin: 0; max-height: 360px; overflow: auto; padding: 8px 10px; background: var(--surface-2); border-radius: 6px;
+  font-size: 12px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }
+
 /* ---------- analytics */
 .kpis .stat-value { font-size: 22px; }
 .analytics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 16px; }

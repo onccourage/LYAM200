@@ -111,6 +111,7 @@ class AnthropicProvider:
         self.model = model or settings.llm_model
         self.client = anthropic.AsyncAnthropic(
             api_key=api_key or settings.anthropic_api_key or None,
+            base_url=settings.anthropic_api_base,
             timeout=settings.llm_timeout_sec,
             max_retries=settings.llm_max_retries,  # 408/409/429/5xx + сетевые ошибки, экспоненциальная задержка
         )
