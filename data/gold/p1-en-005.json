@@ -1,0 +1,50 @@
+{
+  "conversation_id": "p1-en-005",
+  "group_id": "DEV",
+  "annotator": "",
+  "checklist_id": "default_chat",
+  "checklist_version": 4,
+  "draft_from_model": false,
+  "answers": {
+    "c01": null,
+    "c02": null,
+    "c03": null,
+    "c04": null,
+    "c05": null,
+    "c06": null,
+    "c07": null,
+    "c08": null
+  },
+  "notes": {},
+  "_help": {
+    "c01": "Установление контакта: yes, no",
+    "c02": "Выявление потребности: yes, no, na",
+    "c03": "Идентификация: yes, no, na",
+    "c04": "Корректная и полная консультация: 20, 15, 10, 5, 0, na",
+    "c05": "Эмпатия и клиентоориентированность: yes, no",
+    "c06": "Управление диалогом, скорость и грамотность: 10, 7, 4, 0",
+    "c07": "Завершение: yes, no, na",
+    "c08": "Грубые ошибки: yes, no (flag: gross_types из ['insult', 'bypass_service', 'confidential_disclosure'])"
+  },
+  "_meta": {
+    "channel": "agent chat",
+    "language": "EN",
+    "audio_url": null
+  },
+  "_transcript": [
+    "[m0][00:00][client] I'm going to a bank branch to fund the brokerage account. Where do I get the transfer details?",
+    "[m1][00:02][bot] Hello! I'm AIM, the Freedom Broker AI assistant. I can answer questions about products and services, provide information about your accounts, assets and fees, compare information in a table, share your account manager's contact details, and pass your question to our support team.",
+    "[m2][00:02][bot] By continuing this conversation, you agree to the collection and processing of your personal data and confirm that you have read the company's Privacy Policy.",
+    "[m3][00:11][bot] You can download the bank transfer details in the app.",
+    "[m4][00:37][client] Connect me with someone, please. I don't want to take the wrong details to the branch.",
+    "[m5][00:38][bot] Would you like me to connect you with an agent?",
+    "[m6][00:55][client] Yes, please",
+    "[m7][00:56][bot] Please wait. An agent will join the chat shortly.",
+    "[m8][00:59][system] Chat transferred to an agent.",
+    "[m9][02:52][operator] Hi, I'm Lina. In the app, open Menu, then Add Funds, then the bank transfer details option.",
+    "[m10][03:33][client] I'm sending euros. Is it the same page?",
+    "[m11][04:23][operator] Yes. Select the currency you need before downloading the details. Take those details to the branch.",
+    "[m12][05:02][client] Got them, thanks.",
+    "[m13][05:51][operator] You're welcome. Goodbye!"
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "conversation_id": "p1-en-004",
+  "group_id": "DEV",
+  "annotator": "",
+  "checklist_id": "default_chat",
+  "checklist_version": 4,
+  "draft_from_model": false,
+  "answers": {
+    "c01": null,
+    "c02": null,
+    "c03": null,
+    "c04": null,
+    "c05": null,
+    "c06": null,
+    "c07": null,
+    "c08": null
+  },
+  "notes": {},
+  "_help": {
+    "c01": "Установление контакта: yes, no",
+    "c02": "Выявление потребности: yes, no, na",
+    "c03": "Идентификация: yes, no, na",
+    "c04": "Корректная и полная консультация: 20, 15, 10, 5, 0, na",
+    "c05": "Эмпатия и клиентоориентированность: yes, no",
+    "c06": "Управление диалогом, скорость и грамотность: 10, 7, 4, 0",
+    "c07": "Завершение: yes, no, na",
+    "c08": "Грубые ошибки: yes, no (flag: gross_types из ['insult', 'bypass_service', 'confidential_disclosure'])"
+  },
+  "_meta": {
+    "channel": "agent chat",
+    "language": "EN",
+    "audio_url": null
+  },
+  "_transcript": [
+    "[m0][00:00][client] I need my broker statement for last year, not just the current balance.",
+    "[m1][00:01][bot] Hello! I'm AIM, the Freedom Broker AI assistant. I can answer questions about products and services, provide information about your accounts, assets and fees, compare information in a table, share your account manager's contact details, and pass your question to our support team.",
+    "[m2][00:02][bot] By continuing this conversation, you agree to the collection and processing of your personal data and confirm that you have read the company's Privacy Policy.",
+    "[m3][00:10][bot] The broker report is available in the app under Reports and Documents.",
+    "[m4][00:23][client] Can an agent walk me through it?",
+    "[m5][00:28][bot] Would you like me to connect you with an agent?",
+    "[m6][00:42][client] yes please",
+    "[m7][00:43][bot] Please wait. An agent will join the chat shortly.",
+    "[m8][00:45][system] Chat transferred to an agent.",
+    "[m9][02:19][operator] Hi, I'm Alex. Open Reports and Documents, choose Broker Report, then select the dates for the year you need.",
+    "[m10][02:53][client] Do I download it after I set the dates?",
+    "[m11][03:21][operator] Yes. Download the report for that date range.",
+    "[m12][03:39][client] That worked. Thanks!",
+    "[m13][04:21][operator] You're welcome. Have a good day!"
+  ]
+}

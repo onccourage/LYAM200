@@ -1,0 +1,56 @@
+{
+  "conversation_id": "p1-en-008",
+  "group_id": "DEV",
+  "annotator": "",
+  "checklist_id": "default_chat",
+  "checklist_version": 4,
+  "draft_from_model": false,
+  "answers": {
+    "c01": null,
+    "c02": null,
+    "c03": null,
+    "c04": null,
+    "c05": null,
+    "c06": null,
+    "c07": null,
+    "c08": null
+  },
+  "notes": {},
+  "_help": {
+    "c01": "Установление контакта: yes, no",
+    "c02": "Выявление потребности: yes, no, na",
+    "c03": "Идентификация: yes, no, na",
+    "c04": "Корректная и полная консультация: 20, 15, 10, 5, 0, na",
+    "c05": "Эмпатия и клиентоориентированность: yes, no",
+    "c06": "Управление диалогом, скорость и грамотность: 10, 7, 4, 0",
+    "c07": "Завершение: yes, no, na",
+    "c08": "Грубые ошибки: yes, no (flag: gross_types из ['insult', 'bypass_service', 'confidential_disclosure'])"
+  },
+  "_meta": {
+    "channel": "agent chat",
+    "language": "EN",
+    "audio_url": null
+  },
+  "_transcript": [
+    "[m0][00:00][client] There are several results for the company I'm looking up. How can I find the exact stock?",
+    "[m1][00:01][bot] Hello! I'm AIM, the Freedom Broker AI assistant. I can answer questions about products and services, provide information about your accounts, assets and fees, compare information in a table, share your account manager's contact details, and pass your question to our support team.",
+    "[m2][00:01][bot] By continuing this conversation, you agree to the collection and processing of your personal data and confirm that you have read the company's Privacy Policy.",
+    "[m3][00:13][bot] Try searching by ticker in Quotes.",
+    "[m4][00:32][client] I have the ticker but I'm still new to this. Can I talk to an agent?",
+    "[m5][00:36][bot] Would you like me to connect you with an agent?",
+    "[m6][00:42][client] Yes, please",
+    "[m7][00:43][bot] Please wait. An agent will join the chat shortly.",
+    "[m8][00:46][system] Chat transferred to an agent.",
+    "[m9][01:08][client] I have the app open already.",
+    "[m10][01:47][operator] Hi, I'm Sofia. Enter the ticker in the search bar under Quotes. Check that the result shows the ticker you intended before opening an order.",
+    "[m11][02:13][client] Now there's one result. Where do I go from there?",
+    "[m12][02:55][operator] Open that security, fill in the buy order parameters and review them before submitting the order.",
+    "[m13][03:25][client] I'm just looking for now. Thank you.",
+    "[m14][03:39][client] Hang on, I have another question. The order screen has a Use Margin checkbox. How do I turn that off?",
+    "[m15][04:26][operator] Before you submit, open Order Settings and untick Use Margin.",
+    "[m16][04:44][client] Found it. Does that change a position I already own?",
+    "[m17][05:22][operator] That setting is for the order you're entering now. It doesn't answer what's happening with an existing position.",
+    "[m18][05:44][client] Okay, I'll leave the order unsubmitted for now.",
+    "[m19][06:13][operator] Of course. Have a good day!"
+  ]
+}

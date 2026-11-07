@@ -1,0 +1,51 @@
+{
+  "conversation_id": "p1-en-014",
+  "group_id": "DEV",
+  "annotator": "",
+  "checklist_id": "default_chat",
+  "checklist_version": 4,
+  "draft_from_model": false,
+  "answers": {
+    "c01": null,
+    "c02": null,
+    "c03": null,
+    "c04": null,
+    "c05": null,
+    "c06": null,
+    "c07": null,
+    "c08": null
+  },
+  "notes": {},
+  "_help": {
+    "c01": "Установление контакта: yes, no",
+    "c02": "Выявление потребности: yes, no, na",
+    "c03": "Идентификация: yes, no, na",
+    "c04": "Корректная и полная консультация: 20, 15, 10, 5, 0, na",
+    "c05": "Эмпатия и клиентоориентированность: yes, no",
+    "c06": "Управление диалогом, скорость и грамотность: 10, 7, 4, 0",
+    "c07": "Завершение: yes, no, na",
+    "c08": "Грубые ошибки: yes, no (flag: gross_types из ['insult', 'bypass_service', 'confidential_disclosure'])"
+  },
+  "_meta": {
+    "channel": "agent chat",
+    "language": "EN",
+    "audio_url": null
+  },
+  "_transcript": [
+    "[m0][00:00][client] Can someone check why withdrawals are blocked on my account?",
+    "[m1][00:03][bot] Hello! I'm AIM, the Freedom Broker AI assistant. I can answer questions about products and services, provide information about your accounts, assets and fees, compare information in a table, share your account manager's contact details, and pass your question to our support team.",
+    "[m2][00:03][bot] By continuing this conversation, you agree to the collection and processing of your personal data and confirm that you have read the company's Privacy Policy.",
+    "[m3][00:12][bot] An agent can help with an account-specific check.",
+    "[m4][01:03][client] Please connect me to one.",
+    "[m5][01:08][bot] Would you like me to connect you with an agent?",
+    "[m6][01:12][client] Yes, please",
+    "[m7][01:13][bot] Please wait. An agent will join the chat shortly.",
+    "[m8][01:16][system] Chat transferred to an agent.",
+    "[m9][01:35][client] I'm on the withdrawal screen now.",
+    "[m10][02:54][operator] Hi, I'm Tyler. I can see a withdrawal restriction on your account.",
+    "[m11][03:26][client] How do you know it's my account? I haven't verified anything.",
+    "[m12][03:52][operator] We can skip that. I'll send it to the team to check the reason.",
+    "[m13][04:04][client] Will I hear back here?",
+    "[m14][04:42][operator] Goodbye."
+  ]
+}
