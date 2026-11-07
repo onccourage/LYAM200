@@ -89,17 +89,19 @@ def test_suggest_diverse(mock_payload):
 
 def test_scripts_run(world, tmp_path, monkeypatch):
     path, *_ , gold_dir = world
-    env = {**__import__("os").environ, "DB_PATH": str(path)}
+    # PYTHONUTF8: дочерний процесс пишет в stdout байты консольной кодировки (cp1251 на ru-Windows) без него,
+    # а text=True декодирует их как utf-8 — несовпадение валит тест на не-UTF8-Windows
+    env = {**__import__("os").environ, "DB_PATH": str(path), "PYTHONUTF8": "1"}
     out = subprocess.run([sys.executable, "scripts/eval_gold.py", "MOCK", "--gold-dir", str(gold_dir),
-                          "--json", str(tmp_path / "r.json")], capture_output=True, text=True, env=env)
+                          "--json", str(tmp_path / "r.json")], capture_output=True, text=True, encoding="utf-8", env=env)
     assert out.returncode == 0, out.stderr
     assert "c06" in out.stdout and "По языкам" in out.stdout
-    assert json.loads((tmp_path / "r.json").read_text())["dialogs"] == 3
+    assert json.loads((tmp_path / "r.json").read_text(encoding="utf-8"))["dialogs"] == 3
     tpl = tmp_path / "tpl"
     out = subprocess.run([sys.executable, "scripts/gold_template.py", "MOCK", "--suggest", "2", "--out", str(tpl),
-                          "--from-model"], capture_output=True, text=True, env=env)
+                          "--from-model"], capture_output=True, text=True, encoding="utf-8", env=env)
     assert out.returncode == 0, out.stderr
     files = list(tpl.glob("*.json"))
     assert len(files) == 2
-    doc = json.loads(files[0].read_text())
+    doc = json.loads(files[0].read_text(encoding="utf-8"))
     assert doc["_transcript"] and "c01" in doc["_help"]

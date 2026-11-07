@@ -49,8 +49,10 @@ FRAME = """Ты — контролёр качества службы подде�
 событие, если критерий касается события).
 - Для "no" за пропущенное действие, когда процитировать нечего, укажи checked_range — диапазон реплик, \
 который ты проверил и где действия нет (from/to — message_id). Если "no" из-за неправильного действия — \
-процитируй это действие.
+процитируй это действие. Если checked_range не нужен — оставь from и to пустыми строками "".
 - Если доказательства не нужны (например, "na"), evidence может быть пустым массивом.
+- na_reason заполняй только при ответе "na" (какое условие неприменимости выполнено); в остальных случаях \
+оставляй пустой строкой "".
 
 # Обоснование
 - rationale — 1–3 коротких предложения на {lang} языке в стиле памятки: «<Критерий> — <ответ>. <Почему>. \
@@ -143,14 +145,13 @@ _EVIDENCE = {
     "required": ["message_id", "quote"],
     "additionalProperties": False,
 }
+# Без anyOf[тип, null]: такие объединения на каждом поле каждого критерия раздувают скомпилированную
+# грамматику Anthropic API («compiled grammar is too large») уже на 6-8 критериях в одном запросе.
+# Вместо null — пустая строка/пустые from-to; validator.py уже трактует их как "не задано".
 _RANGE = {
-    "anyOf": [
-        {"type": "object", "properties": {"from": {"type": "string"}, "to": {"type": "string"}},
-         "required": ["from", "to"], "additionalProperties": False},
-        {"type": "null"},
-    ]
+    "type": "object", "properties": {"from": {"type": "string"}, "to": {"type": "string"}},
+    "required": ["from", "to"], "additionalProperties": False,
 }
-_NULLABLE_STR = {"anyOf": [{"type": "string"}, {"type": "null"}]}
 
 
 def criterion_schema(c: Criterion) -> dict:
@@ -158,7 +159,7 @@ def criterion_schema(c: Criterion) -> dict:
         "evidence": {"type": "array", "items": _EVIDENCE},
         "checked_range": _RANGE,
         "rationale": {"type": "string"},
-        "na_reason": _NULLABLE_STR,
+        "na_reason": {"type": "string"},
         "answer": {"type": "string", "enum": answer_options(c)},
         "confidence": {"type": "number"},
     }

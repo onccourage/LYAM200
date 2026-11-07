@@ -53,6 +53,11 @@ class EvalOutcome:
     cached_criteria: list[str] = field(default_factory=list)
 
 
+def _chunk(items: list[Criterion], size: int) -> list[list[Criterion]]:
+    size = max(1, size)
+    return [items[i:i + size] for i in range(0, len(items), size)]
+
+
 def merge_votes(cands: list[Verdict], samples: int) -> Verdict:
     """Консенсус: ответ большинства; ничья — по средней уверенности; обоснование — самого уверенного голоса."""
     if samples <= 1:
@@ -128,54 +133,68 @@ async def evaluate_conversation(
         db.cache_delete_for(list(keys.values()), path=db_path)
     missing = [c for c in to_llm if c.id not in verdicts]
 
-    # --- LLM: основной вызов (или N проходов консенсуса) + один повтор по ошибочным критериям
+    # --- LLM: критерии дробятся на группы (llm_criteria_chunk_size) — иначе Anthropic отклоняет схему на
+    # ~6+ разнородных критериях; каждая группа × каждый проход консенсуса (samples) — отдельный вызов,
+    # результаты сливаются по criterion_id, дальше логика (голосование, повтор) не отличает группы.
     raw_items: dict = {}
     if missing:
-        if samples == 1:
-            results = [await _ask(provider, prepared, missing, usage, raw_log)]
-        else:
-            results = await asyncio.gather(*(_ask(provider, prepared, missing, usage, raw_log, sample=i)
-                                             for i in range(samples)))
-        per_sample: list[dict[str, Verdict]] = []
+        chunks = _chunk(missing, settings.llm_criteria_chunk_size)
+        sample_ids: list[int | None] = list(range(samples)) if samples > 1 else [None]
+        calls = [(s, chunk) for s in sample_ids for chunk in chunks]
+        results = await asyncio.gather(*(_ask(provider, prepared, chunk, usage, raw_log, sample=s)
+                                         for s, chunk in calls))
+
+        per_sample: dict[int | None, dict[str, Verdict]] = {}
         errors: dict[str, list[str]] = {}
         call_errors: list[str] = []
-        for resp, err in results:
+        any_ok = False
+        for (s, chunk), (resp, err) in zip(calls, results):
             if resp is None:
                 call_errors.append(err)
+                for c in chunk:
+                    errors.setdefault(c.id, []).append(err)
                 continue
+            any_ok = True
             if isinstance(resp.data, dict):
                 for k, v in resp.data.items():
                     raw_items.setdefault(k, v)
-            ok, errs = validate_response(missing, resp.data, prepared)
-            per_sample.append(ok)
+            ok, errs = validate_response(chunk, resp.data, prepared)
+            per_sample.setdefault(s, {}).update(ok)
             for cid, e in errs.items():
                 errors.setdefault(cid, []).extend(e)
-        if not per_sample:
+        if not any_ok:
             llm_error = call_errors[0]
-            errors = {c.id: [llm_error] for c in missing}
         for c in missing:
-            cands = [s[c.id] for s in per_sample if c.id in s]
+            cands = [ps[c.id] for ps in per_sample.values() if c.id in ps]
             if cands:
                 verdicts[c.id] = merge_votes(cands, samples)
         errors = {cid: e for cid, e in errors.items() if cid not in verdicts}
         fatal = any(x.get("fatal") for x in raw_log)
         if errors and not fatal:
             retry = [c for c in missing if c.id in errors]
-            resp2, err2 = await _ask(provider, prepared, retry, usage, raw_log, retry_errors=errors)
-            if resp2 is None:
-                llm_error = err2
-                errors2 = {c.id: errors[c.id] + [err2] for c in retry}
-            else:
-                ok2, errors2 = validate_response(retry, resp2.data, prepared)
+            retry_chunks = _chunk(retry, settings.llm_criteria_chunk_size)
+            retry_results = await asyncio.gather(*(
+                _ask(provider, prepared, chunk, usage, raw_log,
+                     retry_errors={c.id: errors[c.id] for c in chunk}) for chunk in retry_chunks))
+            errors2: dict[str, list[str]] = {}
+            for chunk, (resp2, err2) in zip(retry_chunks, retry_results):
+                if resp2 is None:
+                    llm_error = llm_error or err2
+                    for c in chunk:
+                        errors2[c.id] = errors[c.id] + [err2]
+                    continue
+                ok2, e2 = validate_response(chunk, resp2.data, prepared)
                 verdicts.update(ok2)
                 if isinstance(resp2.data, dict):
                     raw_items.update(resp2.data)
+                errors2.update(e2)
         elif errors:
             errors2 = errors
         if errors:
             for cid, errs in errors2.items():
-                verdicts[cid] = needs_review(cid, "ответ модели не прошёл проверку после повторного запроса",
-                                             errs, raw_items.get(cid))
+                if cid not in verdicts:
+                    verdicts[cid] = needs_review(cid, "ответ модели не прошёл проверку после повторного запроса",
+                                                 errs, raw_items.get(cid))
         fresh = [(keys[c.id], c.id, verdicts[c.id].model_dump(mode="json", by_alias=True))
                  for c in missing if verdicts[c.id].status == "ok"]
         db.cache_put_many(fresh, path=db_path)
@@ -191,11 +210,12 @@ async def evaluate_conversation(
         status = "done" if not result.is_partial else "partial"
     except ScoringError as e:  # не должно случаться после валидации — но не роняем диалог
         score_json, total, gross, status = {"error": str(e), "errors": e.errors}, None, False, "error"
+    # status уже верно отражает needs_review через result.is_partial (выше): llm_error сам по себе
+    # не должен понижать статус — временный сбой с успешным повтором не оставляет needs_review
+    # критериев, и диалог полностью оценён. "error" — только когда модели не досталось вообще ничего.
     llm_failed_all = bool(missing) and all(verdicts[c.id].status != "ok" for c in missing)
     if llm_error and llm_failed_all and not cached_ids:
         status = "error"  # модель недоступна: такую оценку не сохраняем, текущая остаётся прежней
-    elif llm_error and status != "error":
-        status = "partial"
 
     ordered = [verdicts[c.id] for c in checklist.enabled_criteria if c.id in verdicts]
     record = {

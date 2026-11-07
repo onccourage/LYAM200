@@ -106,8 +106,13 @@ function provenance(evaluation, conversation) {
       }) }, "Сырой ответ модели"),
       h("button", { class: "btn btn-sm", type: "button", onclick: load(async () => {
         const p = await api.getEvaluationPrompt(g, c);
-        return [h("div", { class: "muted small" }, p.note), h("div", { class: "small" }, h("strong", {}, "System")), pre(p.system),
-          h("div", { class: "small" }, h("strong", {}, "User")), pre(p.user), h("div", { class: "small" }, h("strong", {}, "JSON-схема ответа")), pre(p.schema)];
+        return [h("div", { class: "muted small" }, p.note),
+          ...p.requests.flatMap((r, i) => [
+            h("div", { class: "small" }, h("strong", {}, `Запрос ${i + 1} из ${p.requests.length}`), ` · критерии: ${r.criteria.join(", ")}`),
+            h("div", { class: "small" }, "System"), pre(r.system),
+            h("div", { class: "small" }, "User"), pre(r.user),
+            h("div", { class: "small" }, "JSON-схема ответа"), pre(r.schema),
+          ])];
       }) }, "Промпт")),
     out);
 }

@@ -8,7 +8,8 @@ import pytest
 for _k, _v in {"LLM_PROVIDER": "anthropic", "LLM_MODEL": "claude-sonnet-5-5", "ANTHROPIC_API_KEY": "",
                "LLM_BASE_URL": "", "LLM_API_KEY": "", "DATASET_API_URL": "", "PRICE_INPUT_PER_MTOK": "2",
                "PRICE_OUTPUT_PER_MTOK": "10", "BATCH_CONCURRENCY": "5", "LLM_EFFORT": "medium",
-               "LLM_SERVER_FALLBACK": "auto", "EXPLANATION_LANG": "ru", "LONG_PAUSE_SEC": "120"}.items():
+               "LLM_SERVER_FALLBACK": "auto", "EXPLANATION_LANG": "ru", "LONG_PAUSE_SEC": "120",
+               "SEED_ON_START": "0", "LLM_CRITERIA_PER_CALL": "20"}.items():  # большой — не дробить в тестах
     os.environ[_k] = _v
 
 ROOT = Path(__file__).resolve().parent.parent

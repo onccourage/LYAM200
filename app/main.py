@@ -234,7 +234,13 @@ def api_get_evaluation(group_id: str, conversation_id: str, raw: bool = False) -
 
 @app.get("/api/evaluations/{group_id}/{conversation_id}/prompt")
 def api_evaluation_prompt(group_id: str, conversation_id: str) -> dict:
-    """Промпт, по которому модель оценивала диалог: рамка + критерии версии чек-листа + факты + транскрипт."""
+    """Промпты, по которым модель оценивала диалог: рамка + критерии версии чек-листа + факты + транскрипт.
+
+    Критерии реально отправлялись группами (evaluator._chunk — иначе Anthropic отклоняет схему на
+    ~6+ разнородных критериях в одном запросе), поэтому здесь restoреставрируется РОВНО столько
+    запросов, сколько реально ушло: по группе llm_criteria_chunk_size на вызов.
+    """
+    from .evaluator import _chunk
     from .preprocess import preprocess
     from .prompt_builder import PROMPT_VERSION, build_request
     from .scoring import applies_to_channel
@@ -244,10 +250,14 @@ def api_evaluation_prompt(group_id: str, conversation_id: str) -> dict:
         raise HTTPException(status_code=404, detail="Диалог ещё не оценён")
     cl = db.get_checklist(ev["checklist_id"], ev["checklist_version"])
     crit = [c for c in cl.enabled_criteria if applies_to_channel(c, conv.channel) and not c.requires_audio]
-    req = build_request(preprocess(conv), crit)
-    return {**req, "prompt_version": PROMPT_VERSION, "evaluated_with": ev["prompt_version"],
-            "note": "Восстановлен из версии чек-листа и транскрипта" + (
-                "" if ev["prompt_version"] == PROMPT_VERSION else f"; оценка сделана рамкой {ev['prompt_version']}")}
+    prepared = preprocess(conv)
+    chunks = _chunk(crit, settings.llm_criteria_chunk_size) or [[]]
+    requests = [{**build_request(prepared, chunk), "criteria": [c.id for c in chunk]} for chunk in chunks]
+    return {"requests": requests, "prompt_version": PROMPT_VERSION, "evaluated_with": ev["prompt_version"],
+            "note": f"Восстановлено {len(requests)} запрос(ов) из версии чек-листа и транскрипта "
+                    f"(группы по {settings.llm_criteria_chunk_size} критериев — реальное разбиение могло "
+                    "отличаться, если настройка менялась после оценки)" +
+                    ("" if ev["prompt_version"] == PROMPT_VERSION else f"; оценка сделана рамкой {ev['prompt_version']}")}
 
 
 @app.get("/api/datasets/{group_id}/evaluations")

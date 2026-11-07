@@ -22,7 +22,7 @@ def test_export_import_roundtrip(tmp_path, mock_payload, default_checklist_dict,
     for c in db.list_conversations("MOCK", path=src):
         asyncio.run(evaluate_conversation(c, v2, FakeProvider(make_responder({"c06": {"answer": "7"}})), db_path=src))
     seed = export_seed("MOCK", tmp_path / "seed" / "MOCK.json", db_path=src)
-    doc = json.loads(seed.read_text())
+    doc = json.loads(seed.read_text(encoding="utf-8"))
     assert [c["version"] for c in doc["checklists"]] == [2] and len(doc["evaluations"]) == 4
     assert doc["evaluations"][0]["raw_responses"] and doc["criterion_cache"]   # сырые ответы — для прозрачности
 

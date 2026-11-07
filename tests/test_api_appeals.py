@@ -4,7 +4,10 @@ def test_appeal_http_flow(api_client):
     assert ev["total"] == "100.00"
     calls = len(c.fake.requests)
     pr = c.get("/api/evaluations/MOCK/mock-ru-001/prompt").json()
-    assert "[c01]" in pr["system"] and "<transcript>" in pr["user"] and "c08" in pr["schema"]["properties"]
+    assert len(pr["requests"]) == 1   # LLM_CRITERIA_PER_CALL=20 в тестах — все 8 критериев в одной группе
+    req = pr["requests"][0]
+    assert "[c01]" in req["system"] and "<transcript>" in req["user"] and "c08" in req["schema"]["properties"]
+    assert req["criteria"] == [f"c0{i}" for i in range(1, 9)]
     assert c.get("/api/evaluations/MOCK/mock-ru-001", params={"raw": True}).json()["raw_responses"][0]["data"]["c01"]
     assert c.get("/api/datasets/MOCK/conversations").json()[3]["evaluation"]["origin"] == "live"
 
@@ -28,3 +31,18 @@ def test_appeal_http_flow(api_client):
     assert c.get("/api/appeals", params={"status": "resolved"}).json()[0]["id"] == aid
     assert len(c.fake.requests) == calls   # пересчёт без LLM
     assert c.get("/api/appeals/999").status_code == 404
+
+
+def test_prompt_endpoint_reflects_actual_chunking(api_client, monkeypatch):
+    """Восстановленный промпт должен отражать РЕАЛЬНОЕ число вызовов модели (evaluator._chunk),
+    а не один объединённый запрос на все критерии — иначе блок прозрачности вводит в заблуждение."""
+    from app import config
+    c = api_client
+    ev = c.post("/api/evaluations/MOCK/mock-ru-001").json()
+    assert ev["total"] == "100.00"
+    monkeypatch.setattr(config.settings, "llm_criteria_chunk_size", 3)
+    pr = c.get("/api/evaluations/MOCK/mock-ru-001/prompt").json()
+    assert len(pr["requests"]) == 3   # 8 критериев / 3 = группы [3,3,2]
+    assert sorted(len(r["criteria"]) for r in pr["requests"]) == [2, 3, 3]
+    seen = {cid for r in pr["requests"] for cid in r["criteria"]}
+    assert seen == {f"c0{i}" for i in range(1, 9)}

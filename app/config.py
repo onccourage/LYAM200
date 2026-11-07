@@ -36,6 +36,11 @@ class Settings:
     llm_max_tokens: int = field(default_factory=lambda: int(_env("LLM_MAX_TOKENS", "16000")))
     llm_server_fallback: str = field(default_factory=lambda: _env("LLM_SERVER_FALLBACK", "auto"))  # auto|on|off
     llm_timeout_sec: float = field(default_factory=lambda: float(_env("LLM_TIMEOUT_SEC", "300")))
+    # Anthropic отклоняет запрос ("compiled grammar is too large") при ~6+ разнородных критериях
+    # в одной JSON-схеме ответа — проверено на реальном API: 4-5 стабильно проходят, 6 падает независимо
+    # от состава (шкалы/да-нет/флаг). Критерии дробятся на группы этого размера; на другие провайдеры
+    # (Gemini, OpenAI-совместимые) лимит не похоже распространяется, но дробление безопасно и для них.
+    llm_criteria_chunk_size: int = field(default_factory=lambda: int(_env("LLM_CRITERIA_PER_CALL", "4")))
     llm_samples: int = field(default_factory=lambda: int(_env("LLM_SAMPLES", "1")))  # >1 — консенсус N проходов
     llm_sample_temperature: float = field(default_factory=lambda: float(_env("LLM_SAMPLE_TEMPERATURE", "0.7")))
     llm_max_retries: int = field(default_factory=lambda: int(_env("LLM_MAX_RETRIES", "4")))
