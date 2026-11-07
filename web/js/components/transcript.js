@@ -1,6 +1,7 @@
 // Транскрипт с якорями #m{N}, подсветкой доказательств/диапазонов и плеером для звонков.
 import { API_BASE_URL } from "../api.js";
 import { fmtSec, h } from "../dom.js";
+import { iconPlay } from "../icons.js";
 import { SPEAKER } from "../labels.js";
 
 export function createTranscript(conversation) {
@@ -13,7 +14,7 @@ export function createTranscript(conversation) {
     const role = SPEAKER[m.speaker] ? m.speaker : "other";
     const playBtn = audioUrl && m.offset_sec !== null
       ? h("button", { class: "btn-icon", type: "button", title: `Воспроизвести с ${fmtSec(m.offset_sec)}`,
-        onclick: (e) => { e.stopPropagation(); player.seekMessage(m); } }, "▶")
+        onclick: (e) => { e.stopPropagation(); player.seekMessage(m); } }, iconPlay({ size: 11 }))
       : null;
     const li = h("li", { id: m.id, class: `msg role-${role}`, tabindex: "-1" },
       h("div", { class: "msg-meta" },

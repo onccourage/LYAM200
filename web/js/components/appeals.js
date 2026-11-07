@@ -3,6 +3,7 @@ import { api } from "../api.js";
 import { clear, errorBox, fmtDate, h, spinner, toast } from "../dom.js";
 import { CHANNEL, DECISION, GROSS, answerLabel, answerOptions } from "../labels.js";
 import { pref, role, setPref } from "../state.js";
+import { iconArrowLeft } from "../icons.js";
 import { createTranscript } from "./transcript.js";
 
 const ans = (a, type) => (a === null || a === undefined ? "Требует проверки" : answerLabel(a, type));
@@ -100,7 +101,7 @@ export async function renderAppeal(root, { id }) {
       x.status === "open" ? "на рассмотрении" : `${DECISION[x.decision]} (${ans(x.original_answer)} → ${ans(x.new_answer)}), итог ${x.original_total ?? "—"} → ${x.final_total ?? "—"}`)))) : null;
 
   clear(root).append(h("div", { class: "page page-wide" },
-    h("a", { class: "back", href: "#/appeals/open" }, "← К апелляциям"),
+    h("a", { class: "back", href: "#/appeals/open" }, iconArrowLeft({ size: 14 }), " К апелляциям"),
     h("div", { class: "conv-grid" }, transcript.el,
       h("div", { class: "right-col stack" }, disputed, decisionBox, historyBox))));
 

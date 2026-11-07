@@ -4,6 +4,7 @@ import { api } from "../api.js";
 import { clear, errorBox, fmtDate, h, spinner, toast } from "../dom.js";
 import { CHANNEL } from "../labels.js";
 import { activeChecklist, pref, setPref } from "../state.js";
+import { iconChevron, iconPlus, iconX } from "../icons.js";
 
 const TYPES = { binary: "Да / Нет", scale: "Шкала", flag: "Флаг нарушения (без баллов)" };
 const CHANGE = { added: "добавлен", removed: "удалён", modified: "изменён", disabled: "выключен", enabled: "включён" };
@@ -84,13 +85,13 @@ class Editor {
 
     const sections = h("section", { class: "panel panel-stack" },
       h("div", { class: "panel-head" }, h("h2", {}, "Секции"),
-        h("button", { class: "btn btn-sm", type: "button", onclick: () => this.addSection() }, "+ Секция")),
+        h("button", { class: "btn btn-sm", type: "button", onclick: () => this.addSection() }, iconPlus({ size: 14 }), " Секция")),
       [...d.sections].sort((a, b) => a.order - b.order).map((s) => this.sectionRow(s)));
 
     const order = [...d.sections].sort((a, b) => a.order - b.order).map((s) => s.id);
     const crits = h("section", { class: "panel panel-stack" },
       h("div", { class: "panel-head" }, h("h2", {}, `Критерии (${d.criteria.length})`),
-        h("button", { class: "btn btn-sm btn-primary", type: "button", onclick: () => this.addCriterion() }, "+ Критерий")),
+        h("button", { class: "btn btn-sm btn-primary", type: "button", onclick: () => this.addCriterion() }, iconPlus({ size: 14 }), " Критерий")),
       order.map((sid) => {
         const cs = d.criteria.filter((c) => c.section === sid);
         const sec = d.sections.find((s) => s.id === sid);
@@ -111,7 +112,7 @@ class Editor {
       numberInput(s.order, (v) => { s.order = v; this.changed(true); }, { step: 1, class: "input input-sm w-num", title: "Порядок" }),
       h("button", { class: "btn btn-sm btn-ghost", type: "button", disabled: used,
         title: used ? "В секции есть критерии — сначала перенесите или удалите их" : "Удалить секцию",
-        onclick: () => { this.draft.sections = this.draft.sections.filter((x) => x !== s); this.changed(true); } }, "✕"));
+        onclick: () => { this.draft.sections = this.draft.sections.filter((x) => x !== s); this.changed(true); } }, iconX({ size: 12 })));
   }
 
   addSection() {
@@ -172,7 +173,7 @@ class Editor {
           h("div", { class: "muted small" }, summary)),
         h("div", { class: "crit-head-right" },
           dirty ? h("span", { class: "chip chip-partial" }, isNew ? "новый" : "изменён") : null,
-          h("span", { class: "muted" }, open ? "▲" : "▼"))),
+          h("span", { class: "chevron-btn" }, iconChevron({ size: 16, className: open ? "icon-flip" : "" })))),
       body);
     if (open) body.append(...this.criterionFields(c, isNew));
     return card;
@@ -216,8 +217,8 @@ class Editor {
         " требует прослушивания"))));
     out.push(field("Правила оценки для модели (guidance)", textarea(c.guidance, (v) => { c.guidance = v; this.changed(); }, 4)));
     out.push(h("div", { class: "actions" },
-      h("button", { class: "btn btn-sm", type: "button", onclick: () => this.move(c, -1) }, "↑"),
-      h("button", { class: "btn btn-sm", type: "button", onclick: () => this.move(c, 1) }, "↓"),
+      h("button", { class: "btn btn-sm", type: "button", onclick: () => this.move(c, -1) }, iconChevron({ size: 14, className: "icon-flip" })),
+      h("button", { class: "btn btn-sm", type: "button", onclick: () => this.move(c, 1) }, iconChevron({ size: 14 })),
       h("button", { class: "btn btn-sm btn-danger", type: "button", onclick: () => {
         if (!confirm(`Удалить критерий ${c.id} «${c.title}»? В новой версии его не будет.`)) return;
         this.draft.criteria = this.draft.criteria.filter((x) => x !== c);
@@ -231,22 +232,22 @@ class Editor {
       numberInput(s.value, (v) => { s.value = v; this.changed(); }, { step: "any", min: 0, class: "input input-sm w-num", "aria-label": "Значение ступени" }),
       input(s.label, (v) => { s.label = v; this.changed(); }, { class: "input input-sm grow", placeholder: "Описание ступени" }),
       h("button", { class: "btn btn-sm btn-ghost", type: "button", disabled: c.scale.length <= 2, title: "Удалить ступень",
-        onclick: () => { c.scale.splice(i, 1); this.changed(true); } }, "✕")));
+        onclick: () => { c.scale.splice(i, 1); this.changed(true); } }, iconX({ size: 12 }))));
     return h("div", { class: "subpanel" },
       h("div", { class: "field-label" }, "Ступени шкалы (верхняя = полный вес, баллы = вес × ступень / верхняя)"),
       rows,
-      h("button", { class: "btn btn-sm", type: "button", onclick: () => { c.scale.push({ value: 0, label: "" }); this.changed(true); } }, "+ Ступень"));
+      h("button", { class: "btn btn-sm", type: "button", onclick: () => { c.scale.push({ value: 0, label: "" }); this.changed(true); } }, iconPlus({ size: 14 }), " Ступень"));
   }
 
   flagTypesEditor(c) {
     const rows = c.flag_types.map((f, i) => h("div", { class: "step-row" },
       input(f.id, (v) => { f.id = v.trim(); this.changed(); }, { class: "input input-sm mono w-id", placeholder: "id" }),
       input(f.label, (v) => { f.label = v; this.changed(); }, { class: "input input-sm grow", placeholder: "Описание типа нарушения" }),
-      h("button", { class: "btn btn-sm btn-ghost", type: "button", onclick: () => { c.flag_types.splice(i, 1); this.changed(true); } }, "✕")));
+      h("button", { class: "btn btn-sm btn-ghost", type: "button", onclick: () => { c.flag_types.splice(i, 1); this.changed(true); } }, iconX({ size: 12 }))));
     return h("div", { class: "subpanel" },
       h("div", { class: "field-label" }, "Типы нарушения (необязательно; модель укажет, какие из них есть)"),
       rows,
-      h("button", { class: "btn btn-sm", type: "button", onclick: () => { c.flag_types.push({ id: `type_${c.flag_types.length + 1}`, label: "" }); this.changed(true); } }, "+ Тип"));
+      h("button", { class: "btn btn-sm", type: "button", onclick: () => { c.flag_types.push({ id: `type_${c.flag_types.length + 1}`, label: "" }); this.changed(true); } }, iconPlus({ size: 14 }), " Тип"));
   }
 
   move(c, dir) {

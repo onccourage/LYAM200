@@ -7,6 +7,7 @@ import { renderAppeal, renderAppealsList } from "./components/appeals.js";
 import { renderChecklistEditor } from "./components/checklist.js";
 import { renderConversation } from "./components/conversation.js";
 import { renderDatasets } from "./components/datasets.js";
+import { iconMoon, iconSun } from "./icons.js";
 
 const view = document.getElementById("view");
 
@@ -67,16 +68,28 @@ function setupRole() {
   draw();
 }
 
+function isDark() {
+  const root = document.documentElement;
+  return root.dataset.theme ? root.dataset.theme === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+}
+
 function setupTheme() {
   const btn = document.getElementById("theme-toggle");
+  const label = btn.querySelector(".visually-hidden");
+  const drawIcon = () => {
+    btn.querySelector(".icon")?.remove();
+    // иконка — то, что видно СЕЙЧАС (солнце = светлая тема активна), а не то, во что переключит клик
+    btn.prepend(isDark() ? iconMoon({ size: 16 }) : iconSun({ size: 16 }));
+  };
   btn.addEventListener("click", () => {
     const root = document.documentElement;
-    const dark = root.dataset.theme
-      ? root.dataset.theme === "dark"
-      : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const dark = isDark();
     root.dataset.theme = dark ? "light" : "dark";
     setPref("theme", root.dataset.theme);
+    drawIcon();
   });
+  drawIcon();
+  if (label) label.textContent = "Светлая / тёмная тема";
 }
 
 async function boot() {

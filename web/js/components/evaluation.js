@@ -4,6 +4,7 @@ import { api } from "../api.js";
 import { fmtDate, fmtSec, h, toast } from "../dom.js";
 import { DECISION, GROSS, LOW_CONFIDENCE, answerLabel } from "../labels.js";
 import { pref, role, setPref } from "../state.js";
+import { iconAlertTriangle } from "../icons.js";
 
 export function createEvaluationPanel({ evaluation, checklist, active, conversation, transcript, onReevaluate, onChanged }) {
   const appeals = evaluation.appeals || [];
@@ -171,6 +172,7 @@ function grossBadge(score, verdicts, transcript, flagLabels) {
   const ids = score.gross_criteria || [];
   const ev = ids.flatMap((id) => (verdicts.get(id)?.evidence || []));
   return h("div", { class: "gross-alert" },
+    iconAlertTriangle({ size: 18, className: "gross-alert-icon" }),
     h("strong", {}, "Грубая ошибка"),
     h("span", {}, (score.gross_types || []).map((g) => flagLabels[g] || GROSS[g] || g).join(", ") ||
       (score.gross_criteria || []).join(", ")),

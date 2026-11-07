@@ -4,6 +4,7 @@ import { clear, errorBox, h, spinner, toast } from "../dom.js";
 import { CHANNEL, EVAL_STATUS, GROSS } from "../labels.js";
 import { pref, setPref, runtime } from "../state.js";
 import { createBatchPanel, createStats } from "./batch.js";
+import { iconPlay } from "../icons.js";
 
 const FILTERS = { channel: "", language: "", status: "", gross: "", appeal: "", q: "" };
 
@@ -194,7 +195,7 @@ function row(group, r, selected, onSelect) {
   h("td", {}, h("a", { href, class: "conv-id" }, r.conversation_id),
     h("div", { class: "row-tags" }, `${CHANNEL[r.channel] || r.channel} · ${r.language}`),
     h("div", { class: "preview" }, r.preview)),
-  h("td", { class: "col-opt" }, CHANNEL[r.channel] || r.channel, r.has_audio ? h("span", { class: "muted", title: "Есть аудиозапись" }, " ♪") : null),
+  h("td", { class: "col-opt" }, CHANNEL[r.channel] || r.channel, r.has_audio ? h("span", { class: "audio-flag", title: "Есть аудиозапись" }, iconPlay({ size: 10 })) : null),
   h("td", { class: "col-opt" }, r.language),
   h("td", { class: "num col-opt" }, r.messages_count),
   h("td", { class: "num total-cell" }, e ? (e.total ?? "—") : ""),

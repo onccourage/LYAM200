@@ -3,6 +3,7 @@ import { api } from "../api.js";
 import { clear, errorBox, h, spinner, toast } from "../dom.js";
 import { CHANNEL } from "../labels.js";
 import { activeChecklist, samplesPref } from "../state.js";
+import { iconArrowLeft } from "../icons.js";
 import { createEvaluationPanel } from "./evaluation.js";
 import { createTranscript } from "./transcript.js";
 
@@ -36,7 +37,7 @@ export async function renderConversation(root, { group, conv, focus }) {
   const right = h("div", { class: "right-col" });
 
   const head = h("div", { class: "conv-head" },
-    h("a", { class: "back", href: `#/d/${encodeURIComponent(group)}` }, "← К набору ", group),
+    h("a", { class: "back", href: `#/d/${encodeURIComponent(group)}` }, iconArrowLeft({ size: 14 }), " К набору ", group),
     h("h1", { class: "page-title" }, conversation.conversation_id),
     h("div", { class: "conv-tags" },
       h("span", { class: "chip" }, CHANNEL[conversation.channel] || conversation.channel),

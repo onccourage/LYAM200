@@ -6,44 +6,53 @@
   --border: #dde1e7;
   --text: #1b1f24;
   --muted: #5d6673;
-  --accent: #1f6feb;
+  /* Акцент — проверено скриптом data-viz skill (validate_palette.js) для обоих режимов:
+     полосы светлоты, хроматичность и контраст к фону проходят чисто (не дефолтный "ссылочный" синий). */
+  --accent: #2a63ba;
   --accent-text: #ffffff;
-  --good: #1a7f37;
+  --good: #157a33;
   --good-bg: #dcf5e3;
   --mid: #8a5a00;
   --mid-bg: #fdf0cf;
   --bad: #c62828;
   --bad-bg: #fde3e3;
+  /* Фиксированный (не зависит от темы) — для сплошной заливки с белым текстом: светлый --bad
+     тёмной темы читаем как текст на фоне страницы, но даёт белому тексту контраст всего ~2.8:1.
+     Белый текст на этом значении — 5.62:1 (проверено), подходит для обеих тем без переопределения. */
+  --bad-solid: #c62828;
   --na: #57606a;
   --na-bg: #eceef1;
-  --review: #8250df;
+  --review: #7a3fd9;
   --review-bg: #efe7fd;
-  --operator: #1f6feb;
-  --client: #1a7f37;
+  --operator: #2a63ba;
+  --client: #157a33;
   --hl: #fff2a8;
   --hl-range: #e4ecfb;
   --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 1px 3px rgba(16, 24, 40, .08);
+  --shadow-md: 0 4px 12px rgba(16, 24, 40, .08), 0 2px 4px rgba(16, 24, 40, .06);
   --radius: 10px;
-  --topbar-h: 52px;
+  --radius-sm: 6px;
+  --topbar-h: 56px;
   color-scheme: light;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   font-size: 15px;
   line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0f1216; --surface: #171b21; --surface-2: #1e232b; --border: #2c333d; --text: #e6e9ee; --muted: #9aa4b2;
-    --accent: #4c8dff; --good: #4ac26b; --good-bg: #13321e; --mid: #e3b341; --mid-bg: #3a2e0f; --bad: #ff6b6b;
+    --bg: #0d1016; --surface: #161a21; --surface-2: #1d222b; --border: #2b323d; --text: #e9ebf0; --muted: #96a0ad;
+    --accent: #5b96e8; --accent-text: #0d1016; --good: #4ac26b; --good-bg: #13321e; --mid: #e3b341; --mid-bg: #3a2e0f; --bad: #ff6b6b;
     --bad-bg: #3d1818; --na: #9aa4b2; --na-bg: #262c35; --review: #b392f0; --review-bg: #2c2140;
-    --operator: #6ea8ff; --client: #5fd17f; --hl: #4a4216; --hl-range: #1c2a45; --shadow: none; color-scheme: dark;
+    --operator: #5b96e8; --client: #5fd17f; --hl: #4a4216; --hl-range: #1c2a45; --shadow: none; --shadow-md: none; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0f1216; --surface: #171b21; --surface-2: #1e232b; --border: #2c333d; --text: #e6e9ee; --muted: #9aa4b2;
-  --accent: #4c8dff; --good: #4ac26b; --good-bg: #13321e; --mid: #e3b341; --mid-bg: #3a2e0f; --bad: #ff6b6b;
+  --bg: #0d1016; --surface: #161a21; --surface-2: #1d222b; --border: #2b323d; --text: #e9ebf0; --muted: #96a0ad;
+  --accent: #5b96e8; --accent-text: #0d1016; --good: #4ac26b; --good-bg: #13321e; --mid: #e3b341; --mid-bg: #3a2e0f; --bad: #ff6b6b;
   --bad-bg: #3d1818; --na: #9aa4b2; --na-bg: #262c35; --review: #b392f0; --review-bg: #2c2140;
-  --operator: #6ea8ff; --client: #5fd17f; --hl: #4a4216; --hl-range: #1c2a45; --shadow: none; color-scheme: dark;
+  --operator: #5b96e8; --client: #5fd17f; --hl: #4a4216; --hl-range: #1c2a45; --shadow: none; --shadow-md: none; color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -56,14 +65,20 @@ h1, h2, h3 { margin: 0; line-height: 1.25; }
 .small { font-size: 13px; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 
+/* ---------- icons */
+.icon { flex-shrink: 0; display: inline-block; vertical-align: middle; }
+.icon-flip { transform: rotate(180deg); }
+
 /* ---------- topbar */
 .topbar {
   position: sticky; top: 0; z-index: 20; height: var(--topbar-h);
-  display: flex; align-items: center; gap: 20px; padding: 0 16px;
+  display: flex; align-items: center; gap: 20px; padding: 0 20px;
   background: var(--surface); border-bottom: 1px solid var(--border);
 }
-.brand { font-weight: 700; color: var(--text); white-space: nowrap; }
-.brand span { font-weight: 400; color: var(--muted); margin-left: 6px; }
+.brand { display: flex; align-items: center; gap: 10px; color: var(--text); white-space: nowrap; }
+.brand-mark { color: var(--accent); flex-shrink: 0; }
+.brand-text { display: flex; flex-direction: column; justify-content: center; line-height: 1.2; font-weight: 700; font-size: 15px; letter-spacing: -.01em; }
+.brand-sub { font-weight: 400; font-size: 11px; color: var(--muted); letter-spacing: 0; }
 .nav { display: flex; gap: 4px; flex: 1; min-width: 0; overflow-x: auto; }
 .nav a { padding: 6px 10px; border-radius: 6px; color: var(--muted); white-space: nowrap; }
 .nav a.active, .nav a:hover { background: var(--surface-2); color: var(--text); text-decoration: none; }
@@ -96,6 +111,9 @@ h1, h2, h3 { margin: 0; line-height: 1.25; }
 .btn-ghost { background: transparent; border-color: transparent; }
 .btn-sm { height: 30px; padding: 0 10px; font-size: 13px; }
 .btn-icon { border: 0; background: transparent; color: var(--accent); cursor: pointer; padding: 0 4px; font-size: 12px; }
+.btn-icon-only { width: 36px; padding: 0; color: var(--muted); }
+.btn-icon-only:hover { color: var(--text); }
+.btn-sm.btn-icon-only { width: 30px; }
 .link { border: 0; background: none; padding: 0; color: var(--accent); cursor: pointer; font: inherit; text-decoration: underline; }
 .input { height: 36px; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; min-width: 0; }
 .input:focus, .btn:focus-visible, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -120,7 +138,7 @@ h1, h2, h3 { margin: 0; line-height: 1.25; }
 .chip-review { background: var(--review-bg); color: var(--review); }
 .chip-na { background: var(--na-bg); color: var(--na); }
 .chip-block { display: block; width: max-content; margin-top: 4px; }
-.badge-gross { display: inline-block; margin-left: 6px; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 700; background: var(--bad); color: #fff; }
+.badge-gross { display: inline-block; margin-left: 6px; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 700; background: var(--bad-solid); color: #fff; }
 
 /* ---------- table */
 .table-wrap { overflow-x: auto; }
@@ -134,6 +152,7 @@ h1, h2, h3 { margin: 0; line-height: 1.25; }
 .preview { color: var(--muted); font-size: 13px; max-width: 520px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .total-cell { font-weight: 700; }
 .row-tags { display: none; font-size: 12px; color: var(--muted); }
+.audio-flag { display: inline-flex; margin-left: 4px; color: var(--muted); vertical-align: middle; }
 
 /* ---------- batch & stats */
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin-bottom: 12px; }
@@ -188,8 +207,9 @@ h1, h2, h3 { margin: 0; line-height: 1.25; }
 .total-value { font-size: 44px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
 .total-label { color: var(--muted); font-size: 13px; margin-top: 4px; max-width: 160px; }
 .summary-side { flex: 1; min-width: 240px; display: flex; flex-direction: column; gap: 8px; }
-.gross-alert { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 10px 12px; border-radius: 8px; background: var(--bad); color: #fff; }
+.gross-alert { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 10px 12px; border-radius: 8px; background: var(--bad-solid); color: #fff; }
 .gross-alert .link { color: #fff; }
+.gross-alert-icon { flex-shrink: 0; }
 .meta { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 0; font-size: 13px; }
 .meta dt { color: var(--muted); }
 .meta dd { margin: 0; overflow-wrap: anywhere; }
@@ -275,6 +295,7 @@ h1, h2, h3 { margin: 0; line-height: 1.25; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .crit-edit .crit-head.clickable { cursor: pointer; }
 .crit-head-right { display: flex; gap: 8px; align-items: center; }
+.chevron-btn { display: inline-flex; color: var(--muted); transition: transform .15s; }
 .crit-edit-body { display: flex; flex-direction: column; gap: 10px; padding-top: 8px; border-top: 1px solid var(--border); margin-top: 4px; }
 .crit-dirty { border-left: 3px solid var(--mid); }
 .crit-off { opacity: .6; }
