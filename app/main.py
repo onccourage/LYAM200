@@ -13,6 +13,8 @@ from pydantic import ValidationError
 from . import db
 from .config import settings
 from .dataset import DatasetError, LoadResult, load_dataset, load_upload
+from .evaluator import evaluate_conversation
+from .llm import LLMError, get_provider
 from .models import Checklist, Conversation
 
 
@@ -150,6 +152,43 @@ def api_save_checklist(body: dict) -> dict:
     """Сохранить как НОВУЮ версию (старые версии неизменяемы)."""
     saved = db.save_checklist_version(_parse_checklist(body))
     return _checklist_response(saved)
+
+
+# ---------------------------------------------------------------- evaluations
+
+@app.post("/api/evaluations/{group_id}/{conversation_id}")
+async def api_evaluate(group_id: str, conversation_id: str, checklist_id: str = "default_chat",
+                       checklist_version: int | None = None, full: bool = False) -> dict:
+    """Оценить один диалог. full=true — сбросить кэш критериев для этого диалога."""
+    conv = db.get_conversation(group_id, conversation_id)
+    if conv is None:
+        raise HTTPException(status_code=404, detail="Диалог не найден")
+    cl = db.get_checklist(checklist_id, checklist_version)
+    if cl is None:
+        raise HTTPException(status_code=404, detail="Чек-лист не найден")
+    try:
+        provider = get_provider()
+    except LLMError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    out = await evaluate_conversation(conv, cl, provider, use_cache=not full)
+    rec = dict(out.record)
+    rec.pop("raw_responses", None)
+    return {**rec, "llm_criteria": out.llm_criteria, "cached_criteria": out.cached_criteria}
+
+
+@app.get("/api/evaluations/{group_id}/{conversation_id}")
+def api_get_evaluation(group_id: str, conversation_id: str, raw: bool = False) -> dict:
+    ev = db.get_current_evaluation(group_id, conversation_id)
+    if ev is None:
+        raise HTTPException(status_code=404, detail="Диалог ещё не оценён")
+    if not raw:
+        ev.pop("raw_responses", None)
+    return ev
+
+
+@app.get("/api/datasets/{group_id}/evaluations")
+def api_list_evaluations(group_id: str) -> list[dict]:
+    return db.list_current_evaluations(group_id)
 
 
 # ---------------------------------------------------------------- static

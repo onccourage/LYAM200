@@ -262,3 +262,96 @@ def seed_checklists(path: Path | None = None) -> list[str]:
             save_checklist_version(cl, path=path)
             seeded.append(cl.id)
     return seeded
+
+
+# ---------------------------------------------------------------- кэш критериев
+
+def cache_get_many(keys: list[str], path: Path | None = None) -> dict[str, dict]:
+    if not keys:
+        return {}
+    with connect(path) as conn:
+        q = ",".join("?" * len(keys))
+        rows = conn.execute(f"SELECT cache_key, answer_json FROM criterion_cache WHERE cache_key IN ({q})", keys).fetchall()
+    return {r["cache_key"]: json.loads(r["answer_json"]) for r in rows}
+
+
+def cache_put_many(items: list[tuple[str, str, dict]], path: Path | None = None) -> None:
+    """items: (cache_key, criterion_id, verdict_dict)."""
+    ts = now_iso()
+    with connect(path) as conn:
+        conn.executemany(
+            "INSERT OR REPLACE INTO criterion_cache(cache_key, criterion_id, answer_json, created_at) VALUES (?,?,?,?)",
+            [(k, cid, json.dumps(v, ensure_ascii=False), ts) for k, cid, v in items],
+        )
+
+
+def cache_delete_for(keys: list[str], path: Path | None = None) -> None:
+    if not keys:
+        return
+    with connect(path) as conn:
+        conn.execute(f"DELETE FROM criterion_cache WHERE cache_key IN ({','.join('?' * len(keys))})", keys)
+
+
+# ---------------------------------------------------------------- оценки
+
+EVAL_JSON_FIELDS = ("answers_json", "score_json", "raw_responses_json")
+
+
+def save_evaluation(rec: dict, path: Path | None = None) -> int:
+    """Сохранить оценку как текущую для диалога; прежние помечаются is_current=0 (история сохраняется)."""
+    with connect(path) as conn:
+        conn.execute(
+            "UPDATE evaluations SET is_current=0 WHERE group_id=? AND conversation_id=?",
+            (rec["group_id"], rec["conversation_id"]),
+        )
+        cur = conn.execute(
+            "INSERT INTO evaluations(group_id, conversation_id, checklist_id, checklist_version, model, prompt_version, "
+            "status, total, gross_error, answers_json, score_json, tokens_in, tokens_out, llm_calls, cost, "
+            "raw_responses_json, is_current, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?)",
+            (
+                rec["group_id"], rec["conversation_id"], rec["checklist_id"], rec["checklist_version"],
+                rec.get("model"), rec.get("prompt_version"), rec["status"],
+                rec.get("total"), int(bool(rec.get("gross_error"))),
+                json.dumps(rec["answers"], ensure_ascii=False),
+                json.dumps(rec.get("score"), ensure_ascii=False),
+                rec.get("tokens_in", 0), rec.get("tokens_out", 0), rec.get("llm_calls", 0), str(rec.get("cost", "0")),
+                json.dumps(rec.get("raw_responses", []), ensure_ascii=False), now_iso(),
+            ),
+        )
+        return cur.lastrowid
+
+
+def _eval_row(r: sqlite3.Row) -> dict:
+    d = dict(r)
+    d["answers"] = json.loads(d.pop("answers_json"))
+    d["score"] = json.loads(d.pop("score_json") or "null")
+    d["raw_responses"] = json.loads(d.pop("raw_responses_json") or "[]")
+    d["gross_error"] = bool(d["gross_error"])
+    d["is_current"] = bool(d["is_current"])
+    return d
+
+
+def get_evaluation(evaluation_id: int, path: Path | None = None) -> dict | None:
+    with connect(path) as conn:
+        r = conn.execute("SELECT * FROM evaluations WHERE id=?", (evaluation_id,)).fetchone()
+    return _eval_row(r) if r else None
+
+
+def get_current_evaluation(group_id: str, conversation_id: str, path: Path | None = None) -> dict | None:
+    with connect(path) as conn:
+        r = conn.execute(
+            "SELECT * FROM evaluations WHERE group_id=? AND conversation_id=? AND is_current=1 ORDER BY id DESC LIMIT 1",
+            (group_id, conversation_id),
+        ).fetchone()
+    return _eval_row(r) if r else None
+
+
+def list_current_evaluations(group_id: str, path: Path | None = None) -> list[dict]:
+    """Без сырых ответов — для списков."""
+    with connect(path) as conn:
+        rows = conn.execute(
+            "SELECT id, group_id, conversation_id, checklist_id, checklist_version, model, prompt_version, status, "
+            "total, gross_error, tokens_in, tokens_out, llm_calls, cost, created_at FROM evaluations "
+            "WHERE group_id=? AND is_current=1", (group_id,),
+        ).fetchall()
+    return [dict(r, gross_error=bool(r["gross_error"])) for r in rows]

@@ -29,6 +29,12 @@ class Settings:
     llm_provider: str = field(default_factory=lambda: _env("LLM_PROVIDER", "anthropic"))
     llm_model: str = field(default_factory=lambda: _env("LLM_MODEL", "claude-sonnet-5-5"))
     llm_base_url: str = field(default_factory=lambda: _env("LLM_BASE_URL"))
+    llm_api_key: str = field(default_factory=lambda: _env("LLM_API_KEY"))  # для openai_compatible
+    llm_effort: str = field(default_factory=lambda: _env("LLM_EFFORT", "medium"))  # low|medium|high|"" (не передавать)
+    llm_max_tokens: int = field(default_factory=lambda: int(_env("LLM_MAX_TOKENS", "16000")))
+    llm_server_fallback: str = field(default_factory=lambda: _env("LLM_SERVER_FALLBACK", "auto"))  # auto|on|off
+    llm_timeout_sec: float = field(default_factory=lambda: float(_env("LLM_TIMEOUT_SEC", "300")))
+    llm_max_retries: int = field(default_factory=lambda: int(_env("LLM_MAX_RETRIES", "4")))
 
     dataset_api_url: str = field(default_factory=lambda: _env("DATASET_API_URL"))
     default_group_id: str = field(default_factory=lambda: _env("DEFAULT_GROUP_ID", "DEV"))
@@ -38,8 +44,11 @@ class Settings:
     long_pause_sec: int = field(default_factory=lambda: int(_env("LONG_PAUSE_SEC", "120")))
     batch_concurrency: int = field(default_factory=lambda: int(_env("BATCH_CONCURRENCY", "5")))
 
-    price_input_per_mtok: Decimal = field(default_factory=lambda: Decimal(_env("PRICE_INPUT_PER_MTOK", "0") or "0"))
-    price_output_per_mtok: Decimal = field(default_factory=lambda: Decimal(_env("PRICE_OUTPUT_PER_MTOK", "0") or "0"))
+    price_input_per_mtok: Decimal = field(default_factory=lambda: Decimal(_env("PRICE_INPUT_PER_MTOK", "2") or "0"))
+    price_output_per_mtok: Decimal = field(default_factory=lambda: Decimal(_env("PRICE_OUTPUT_PER_MTOK", "10") or "0"))
+    # множители к цене входа для кэша промпта (запись / чтение)
+    price_cache_write_mult: Decimal = field(default_factory=lambda: Decimal(_env("PRICE_CACHE_WRITE_MULT", "1.25")))
+    price_cache_read_mult: Decimal = field(default_factory=lambda: Decimal(_env("PRICE_CACHE_READ_MULT", "0.1")))
 
     db_path: Path = field(default_factory=lambda: _path(_env("DB_PATH", "data/cqa.db")))
     data_dir: Path = ROOT_DIR / "data"
@@ -58,6 +67,7 @@ class Settings:
         return {
             "llm_provider": self.llm_provider,
             "llm_model": self.llm_model,
+            "llm_effort": self.llm_effort,
             "default_group_id": self.default_group_id,
             "dataset_api_configured": bool(self.dataset_api_url),
             "llm_configured": bool(self.anthropic_api_key) or self.llm_provider != "anthropic",
