@@ -56,7 +56,7 @@ async def _ask(provider: LLMProvider, prepared: PreparedConversation, criteria: 
         resp = await provider.complete_json(req["system"], req["user"], req["schema"])
     except LLMError as e:
         usage.add(e.usage)
-        raw_log.append({"criteria": [c.id for c in criteria], "error": str(e), "raw": e.raw,
+        raw_log.append({"criteria": [c.id for c in criteria], "error": str(e), "raw": e.raw, "fatal": e.fatal,
                         "usage": e.usage.as_dict(), "retry": bool(retry_errors)})
         return None, str(e)
     usage.add(resp.usage)
@@ -114,7 +114,8 @@ async def evaluate_conversation(
             raw_items = resp.data if isinstance(resp.data, dict) else {}
             ok, errors = validate_response(missing, resp.data, prepared)
             verdicts.update(ok)
-        if errors:
+        fatal = any(x.get("fatal") for x in raw_log)
+        if errors and not fatal:
             retry = [c for c in missing if c.id in errors]
             resp2, err2 = await _ask(provider, prepared, retry, usage, raw_log, retry_errors=errors)
             if resp2 is None:
@@ -125,6 +126,9 @@ async def evaluate_conversation(
                 verdicts.update(ok2)
                 if isinstance(resp2.data, dict):
                     raw_items.update(resp2.data)
+        elif errors:
+            errors2 = errors
+        if errors:
             for cid, errs in errors2.items():
                 verdicts[cid] = needs_review(cid, "ответ модели не прошёл проверку после повторного запроса",
                                              errs, raw_items.get(cid))
@@ -168,6 +172,7 @@ async def evaluate_conversation(
         "cost": str(usage.cost().quantize(Decimal("0.000001"))),
         "raw_responses": raw_log,
         "llm_error": llm_error,
+        "llm_fatal": any(x.get("fatal") for x in raw_log),
     }
     if save and status != "error":
         record["id"] = db.save_evaluation(record, path=db_path)

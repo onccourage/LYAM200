@@ -54,6 +54,7 @@ async def run_job(job_id: int, provider: LLMProvider, *, db_path: Path | None = 
     cost = Decimal(0)
     errors: list[dict] = []
     current: list[str] = []
+    fatal: dict = {}
     db.update_batch_job(job_id, path=db_path, status="running", finished_at=None, errors=[], current=[], cost="0", **state)
 
     def flush():
@@ -87,6 +88,11 @@ async def run_job(job_id: int, provider: LLMProvider, *, db_path: Path | None = 
                         rec = {"status": "error", "llm_error": f"{type(e).__name__}: {e}", "cost": "0", "llm_calls": 0}
                     cost += Decimal(rec.get("cost", "0"))
                     state["llm_calls"] += rec.get("llm_calls", 0)
+                    if rec.get("llm_fatal"):
+                        # квота исчерпана / ключ отклонён: остальные диалоги не трогаем, задание можно продолжить позже
+                        fatal.setdefault("error", rec.get("llm_error"))
+                        cancel_event.set()
+                        break
                     if rec["status"] != "error" or attempt >= retries or cancel_event.is_set():
                         break
                     delay = retry_base_sec * (2 ** attempt)
@@ -106,7 +112,10 @@ async def run_job(job_id: int, provider: LLMProvider, *, db_path: Path | None = 
             flush()
 
     await asyncio.gather(*(one(cid) for cid in job["conversation_ids"]))
-    final = "cancelled" if cancel_event.is_set() else "done"
+    final = "failed" if fatal else "cancelled" if cancel_event.is_set() else "done"
+    if fatal:
+        errors.append({"conversation_id": "—", "error": f"Пакет остановлен: {fatal['error']}. "
+                       "Исправьте ключ/квоту и нажмите «Продолжить» — готовые диалоги будут пропущены."})
     db.update_batch_job(job_id, path=db_path, status=final, finished_at=db.now_iso(), cost=str(cost),
                         errors=errors[-50:], current=[], **state)
     return db.get_batch_job(job_id, path=db_path)

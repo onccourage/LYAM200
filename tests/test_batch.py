@@ -132,3 +132,27 @@ def test_dataset_stats(setup):
     s = db.dataset_stats("MOCK", path=path)
     assert s["evaluated"] == 4 and s["conversations"] == 4 and s["avg_total"] == "100.00"
     assert float(s["spent"]) > 0 and s["avg_cost_per_conversation"] is not None and s["avg_tokens_in"] > 0
+
+
+def test_fatal_quota_stops_batch(setup):
+    path, cl, ids = setup
+
+    class Quota(FakeProvider):
+        async def complete_json(self, *a):
+            self.requests.append(a)
+            raise LLMError("квота провайдера исчерпана (429)", fatal=True)
+
+    p = Quota(make_responder())
+    j = asyncio.run(run_job(_job(path, cl, ids), p, db_path=path, concurrency=1, retries=3, retry_base_sec=0))
+    assert j["status"] == "failed" and len(p.requests) == 1          # ни повторов, ни остальных диалогов
+    assert "квота" in j["errors"][-1]["error"] and "Продолжить" in j["errors"][-1]["error"]
+    j = asyncio.run(run_job(j["id"], FakeProvider(make_responder()), db_path=path))
+    assert j["status"] == "done" and j["succeeded"] == 4
+
+
+def test_quota_detection():
+    from app.llm import quota_exhausted
+    assert quota_exhausted(429, '{"retryDelay": "79301s"}')
+    assert quota_exhausted(429, '"quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier"')
+    assert not quota_exhausted(429, '{"retryDelay": "20s"}')
+    assert not quota_exhausted(500, '{"retryDelay": "79301s"}')

@@ -6,7 +6,7 @@ import { activeChecklist, setPref } from "../state.js";
 const POLL_MS = 1000;
 const ACTIVE = new Set(["queued", "running"]);
 const STATUS = { queued: "в очереди", running: "выполняется", done: "завершено", cancelled: "отменено",
-  interrupted: "прервано (перезапуск сервера)", failed: "ошибка" };
+  interrupted: "прервано (перезапуск сервера)", failed: "остановлено: ошибка провайдера" };
 
 export function createBatchPanel({ group, getSelected, onProgress, onFinished }) {
   const fullBox = h("input", { type: "checkbox", id: "batch-full" });
@@ -46,7 +46,7 @@ export function createBatchPanel({ group, getSelected, onProgress, onFinished })
     progress.hidden = false;
     const pct = job.total ? Math.round((job.processed / job.total) * 100) : 100;
     const active = ACTIVE.has(job.status);
-    const resumable = !active && (job.status === "interrupted" || job.status === "cancelled" || job.failed > 0);
+    const resumable = !active && (["interrupted", "cancelled", "failed"].includes(job.status) || job.failed > 0);
     selBtn.disabled = active || !getSelected().length;
     allBtn.disabled = active;
     progress.replaceChildren(...[

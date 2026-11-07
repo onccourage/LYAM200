@@ -21,10 +21,23 @@ SERVER_FALLBACK_BETA = "server-side-fallback-2026-07-01"
 class LLMError(Exception):
     """Неустранимая ошибка вызова (после ретраев SDK) или отказ модели."""
 
-    def __init__(self, message: str, usage: "LLMUsage | None" = None, raw: Any = None):
+    def __init__(self, message: str, usage: "LLMUsage | None" = None, raw: Any = None, fatal: bool = False):
         super().__init__(message)
         self.usage = usage or LLMUsage()
         self.raw = raw
+        self.fatal = fatal   # повторять бессмысленно (исчерпана дневная квота, неверный ключ) — останавливаем пакет
+
+
+QUOTA_RETRY_LIMIT_SEC = 120
+
+
+def quota_exhausted(status: int, body: str) -> bool:
+    """429 с долгим retryDelay или дневной квотой — ждать бессмысленно."""
+    if status != 429:
+        return False
+    import re
+    m = re.search(r'"retryDelay"\s*:\s*"(\d+)', body or "")
+    return bool(m and int(m.group(1)) > QUOTA_RETRY_LIMIT_SEC) or "PerDay" in (body or "")
 
 
 @dataclass
@@ -127,7 +140,8 @@ class AnthropicProvider:
             else:
                 resp = await self.client.messages.create(**kwargs)
         except a.APIStatusError as e:
-            raise LLMError(f"API {e.status_code}: {e.message}") from e
+            fatal = e.status_code in (401, 403) or quota_exhausted(e.status_code, str(getattr(e, "body", "") or e.message))
+            raise LLMError(f"API {e.status_code}: {e.message}", fatal=fatal) from e
         except a.APIConnectionError as e:
             raise LLMError(f"нет соединения с API: {e}") from e
 
@@ -182,6 +196,10 @@ class OpenAICompatibleProvider:
         for attempt in range(settings.llm_max_retries + 1):
             try:
                 r = await self.client.post(f"{self.base_url}/chat/completions", json=body)
+                if quota_exhausted(r.status_code, r.text):
+                    raise LLMError(f"квота провайдера исчерпана (429): {r.text[:300]}", fatal=True)
+                if r.status_code in (401, 403):
+                    raise LLMError(f"ключ отклонён ({r.status_code}): {r.text[:200]}", fatal=True)
                 if r.status_code == 429 or r.status_code >= 500:
                     raise self._httpx.HTTPStatusError("retryable", request=r.request, response=r)
                 r.raise_for_status()
