@@ -261,6 +261,16 @@ def save_checklist_version(checklist: Checklist, path: Path | None = None) -> Ch
     return saved
 
 
+def insert_checklist_exact(checklist: Checklist, path: Path | None = None) -> None:
+    """Вставить версию с её номером (импорт сида). Существующие версии не перезаписываются."""
+    with connect(path) as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO checklists(checklist_id, version, name, body_json, created_at) VALUES (?,?,?,?,?)",
+            (checklist.id, checklist.version, checklist.name, checklist.model_dump_json(),
+             checklist.created_at or now_iso()),
+        )
+
+
 def get_checklist(checklist_id: str, version: int | None = None, path: Path | None = None) -> Checklist | None:
     with connect(path) as conn:
         if version is None:

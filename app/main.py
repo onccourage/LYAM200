@@ -20,6 +20,7 @@ from .checklists import diff as checklist_diff
 from .evaluator import evaluate_conversation
 from .llm import LLMError, get_provider
 from .models import Checklist, Conversation
+from .seed import autoload
 
 
 @asynccontextmanager
@@ -27,6 +28,9 @@ async def lifespan(_: FastAPI):
     db.init_db()
     db.seed_checklists()
     db.mark_running_jobs_interrupted()
+    if settings.seed_on_start:
+        for r in autoload():
+            print(f"[seed] {r}")
     yield
 
 

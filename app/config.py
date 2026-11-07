@@ -52,6 +52,7 @@ class Settings:
     price_cache_write_mult: Decimal = field(default_factory=lambda: Decimal(_env("PRICE_CACHE_WRITE_MULT", "1.25")))
     price_cache_read_mult: Decimal = field(default_factory=lambda: Decimal(_env("PRICE_CACHE_READ_MULT", "0.1")))
 
+    seed_on_start: bool = field(default_factory=lambda: _env("SEED_ON_START", "1") not in ("0", "false", "no"))
     db_path: Path = field(default_factory=lambda: _path(_env("DB_PATH", "data/cqa.db")))
     data_dir: Path = ROOT_DIR / "data"
     web_dir: Path = ROOT_DIR / "web"
