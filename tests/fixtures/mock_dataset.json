@@ -1,0 +1,58 @@
+{
+  "error": "",
+  "isSuccess": true,
+  "data": {
+    "dataset_group_id": "MOCK",
+    "total_records": 4,
+    "records": [
+      {
+        "conversation_id": "mock-ru-001",
+        "channel": "agent chat",
+        "language": "RU",
+        "transcript": [
+          {"timestamp": "00:00", "speaker": "bot", "text": "Здравствуйте! Чем могу помочь?"},
+          {"timestamp": "00:05", "speaker": "client", "text": "Не могу вывести деньги со счёта"},
+          {"timestamp": "00:40", "speaker": "operator", "text": "Здравствуйте! Меня зовут Айгерим. Подскажите номер договора?"},
+          {"timestamp": "01:10", "speaker": "client", "text": "12345"},
+          {"timestamp": "01:12", "speaker": "system", "text": "Клиент идентифицирован"},
+          {"timestamp": "04:30", "speaker": "operator", "text": "Вывод заблокирован из-за незавершённой верификации. Загрузите документ в личном кабинете."},
+          {"timestamp": "05:00", "speaker": "operator", "text": "Могу ещё чем-то помочь? Всего доброго!"},
+          {"timestamp": "05:01", "speaker": "system", "text": "Чат закрыт"}
+        ],
+        "audio_url": null
+      },
+      {
+        "conversation_id": "mock-kz-001",
+        "channel": "agent chat",
+        "language": "KZ",
+        "transcript": [
+          {"timestamp": "00:00:03", "speaker": "client", "text": "Сәлеметсіз бе, тариф туралы сұрақ бар"},
+          {"timestamp": "00:01:15", "speaker": "operator", "text": "Сәлеметсіз бе! Менің атым Ерлан. Қандай тариф қызықтырады?"},
+          {"timestamp": "01:00:00", "speaker": "client", "text": "Рахмет"}
+        ],
+        "audio_url": null
+      },
+      {
+        "conversation_id": "mock-en-001",
+        "channel": "agent chat",
+        "language": "EN",
+        "transcript": [
+          {"timestamp": "00:01", "speaker": "client", "text": "Hi, what are your fees?"},
+          {"timestamp": "00:30", "speaker": "operator", "text": "Hello, I'm John. Our fees are listed on the website."}
+        ],
+        "audio_url": null
+      },
+      {
+        "conversation_id": "mock-call-001",
+        "channel": "voice call",
+        "language": "RU",
+        "transcript": [
+          {"timestamp": "2026-11-06T10:15:02+05:00", "speaker": "operator", "text": "Добрый день, Freedom Broker, меня зовут Данияр."},
+          {"timestamp": "2026-11-06T10:15:09+05:00", "speaker": "client", "text": "Здравствуйте, хочу открыть счёт."},
+          {"timestamp": "2026-11-06T10:16:30.5+05:00", "speaker": "operator", "text": "Конечно, подскажу."}
+        ],
+        "audio_url": "https://example.com/audio/mock-call-001.mp3"
+      }
+    ]
+  }
+}
