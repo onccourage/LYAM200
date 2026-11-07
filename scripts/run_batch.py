@@ -38,9 +38,13 @@ async def main():
     print(f"Задание #{job_id}: {len(ids)} диалогов, {cl.id} v{cl.version}, параллельно {a.concurrency or settings.batch_concurrency}")
 
     task = asyncio.create_task(run_job(job_id, get_provider(), concurrency=a.concurrency))
+    shown = 0
     while not task.done():
         await asyncio.sleep(2)
         j = db.get_batch_job(job_id)
+        for e in j["errors"][shown:]:   # ошибки — сразу, а не только в конце
+            print(f"\n  ! {e['conversation_id']}: {e['error']}")
+        shown = len(j["errors"])
         print(f"\r  {j['processed']}/{j['total']}  ok={j['succeeded']} partial={j['partial']} "
               f"failed={j['failed']} skipped={j['skipped']}  ${float(j['cost']):.4f}   ", end="", flush=True)
     j = task.result()
