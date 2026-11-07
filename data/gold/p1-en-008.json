@@ -1,21 +1,24 @@
 {
   "conversation_id": "p1-en-008",
   "group_id": "DEV",
-  "annotator": "",
+  "annotator": "команда Freedom Broker CQA (проверено вручную)",
   "checklist_id": "default_chat",
   "checklist_version": 4,
   "draft_from_model": false,
   "answers": {
-    "c01": null,
-    "c02": null,
-    "c03": null,
-    "c04": null,
-    "c05": null,
-    "c06": null,
-    "c07": null,
-    "c08": null
+    "c01": "yes",
+    "c02": "na",
+    "c03": "na",
+    "c04": 10,
+    "c05": "yes",
+    "c06": 7,
+    "c07": "yes",
+    "c08": "no"
   },
-  "notes": {},
+  "notes": {
+    "c04": "Клиент спросил, влияет ли выключение margin на уже открытую позицию — ответ оператора (m17) расплывчатый и по сути не отвечает на вопрос.",
+    "c06": "Та же реплика m17 — заметно неясная формулировка, но клиент смог продолжить без переспроса."
+  },
   "_help": {
     "c01": "Установление контакта: yes, no",
     "c02": "Выявление потребности: yes, no, na",
