@@ -73,15 +73,58 @@ function table(head, rows) {
     h("tbody", {}, rows.map((r) => h("tr", {}, r.map((v, i) => h("td", { class: head[i][1] ? "num" : "" }, v ?? "—")))))));
 }
 
+// --- точность против эталона (data/gold/*.json) — тот же расчёт, что scripts/eval_gold.py
+function goldCard(gold) {
+  const TITLE = "Точность против эталона (Ground Truth)";
+  const HINT = "data/gold/*.json — ручная разметка диалогов экспертом; шаблоны: scripts/gold_template.py.";
+  if (!gold.available) {
+    return card(TITLE, HINT, h("div", { class: "empty" }, gold.reason || "Разметка не найдена."), null);
+  }
+  const prog = gold.annotation_progress;
+  if (!gold.pairs) {
+    return card(TITLE, `${HINT} Готово файлов: ${gold.gold_files}, заполнено ${prog.filled} из ${prog.total} ответов.`,
+      h("div", { class: "empty" }, "Эталонные ответы пока не заполнены — числа появятся сразу после разметки."), null);
+  }
+  const pct = (v) => (v === null || v === undefined ? null : Math.round(v * 100));
+  const kpis = h("div", { class: "stats" },
+    tile("диалогов сравнено", gold.dialogs),
+    tile("совпадение ответов", pct(gold.overall_agreement) !== null ? `${pct(gold.overall_agreement)}%` : "—"),
+    tile("MAE итога", gold.total_mae ?? "—", "Средняя абсолютная разница итогового балла модели и эталона, баллы"),
+    tile("итог в пределах 5 б.", pct(gold.total_within_5) !== null ? `${pct(gold.total_within_5)}%` : "—"),
+    tile("совпадение флага грубой ошибки", pct(gold.gross_flag_agreement) !== null ? `${pct(gold.gross_flag_agreement)}%` : "—"),
+    tile("разметка заполнена", `${prog.filled} / ${prog.total}`));
+  const rows = Object.entries(gold.criteria);
+  const chart = hbars(rows.map(([cid, m]) => ({
+    label: `${cid} ${m.title}`,
+    sub: `${TYPE[m.type]} · n=${m.n}${m.kappa !== undefined && m.kappa !== null ? ` · κ=${m.kappa}` : ""}`,
+    value: pct(m.agreement),
+    display: pct(m.agreement) !== null ? `${pct(m.agreement)}%` : "—",
+    tip: [`${cid} ${m.title}`, `совпадение ${pct(m.agreement) !== null ? pct(m.agreement) + "%" : "—"} (n=${m.n})`,
+      m.kappa !== undefined && m.kappa !== null ? `каппа Коэна: ${m.kappa}` : "",
+      m.mae_step !== undefined && m.mae_step !== null ? `MAE ступени: ${m.mae_step} из ${m.scale_max}` : "",
+      m.needs_review ? `нет оценки / needs_review: ${m.needs_review}` : ""].filter(Boolean),
+  })));
+  const tbl = table(
+    [["Критерий"], ["Тип"], ["n", 1], ["Совпадение, %", 1], ["Каппа Коэна", 1], ["MAE ступени", 1], ["needs_review", 1]],
+    rows.map(([cid, m]) => [`${cid} ${m.title}`, TYPE[m.type], m.n, pct(m.agreement), m.kappa ?? "—", m.mae_step ?? "—", m.needs_review]));
+  return card(TITLE, `${gold.gold_files} эталонных диалогов, заполнено ${prog.filled} из ${prog.total} ответов.`,
+    h("div", { class: "panel-stack" }, kpis, chart), tbl);
+}
+
 export async function renderAnalytics(root, { group } = {}) {
   const g = group || pref("group") || "DEV";
   clear(root).append(spinner());
-  let d;
+  let d, gold;
   try {
     d = await api.analytics(g);
   } catch (e) {
     clear(root).append(errorBox(e));
     return;
+  }
+  try {
+    gold = await api.goldAgreement(g);
+  } catch {
+    gold = { available: false, reason: "Не удалось загрузить эталон", gold_files: 0, annotation_progress: { filled: 0, total: 0 } };
   }
   setPref("group", g);
   const s = d.summary, ap = d.appeals;
@@ -166,6 +209,7 @@ export async function renderAnalytics(root, { group } = {}) {
   clear(root).append(h("div", { class: "page" }, head,
     h("div", { class: "muted small" }, `Текущие оценки (с учётом решений по апелляциям). Версии чек-листа: ${versions}.`),
     kpis,
+    goldCard(gold),
     card("Где операторы теряют баллы", "Доля «Нет» для да/нет, доля оценок ниже максимума для шкал, доля нарушений для флагов — среди применимых (без N/A).",
       critChart, critTable),
     h("div", { class: "analytics-grid" },

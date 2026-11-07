@@ -328,6 +328,19 @@ def seed_checklists(path: Path | None = None) -> list[str]:
 
 # ---------------------------------------------------------------- кэш критериев
 
+def avg_tokens_per_call(path: Path | None = None) -> tuple[float | None, float | None]:
+    """Средние токены входа/выхода на один вызов LLM по всей истории оценок (все наборы и модели) —
+    грубая, но честная оценка для предпросмотра влияния смены чек-листа до запуска (estimate_impact)."""
+    with connect(path) as conn:
+        row = conn.execute(
+            "SELECT SUM(tokens_in) AS ti, SUM(tokens_out) AS t_out, SUM(llm_calls) AS calls "
+            "FROM evaluations WHERE llm_calls > 0"
+        ).fetchone()
+    if not row or not row["calls"]:
+        return None, None
+    return row["ti"] / row["calls"], row["t_out"] / row["calls"]
+
+
 def cache_get_many(keys: list[str], path: Path | None = None) -> dict[str, dict]:
     if not keys:
         return {}

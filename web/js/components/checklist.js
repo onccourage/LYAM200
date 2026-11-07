@@ -3,7 +3,7 @@
 import { api } from "../api.js";
 import { clear, errorBox, fmtDate, h, spinner, toast } from "../dom.js";
 import { CHANNEL } from "../labels.js";
-import { activeChecklist, pref, setPref } from "../state.js";
+import { activeChecklist, pref, providerPref, runtime, samplesPref, setPref } from "../state.js";
 import { iconChevron, iconPlus, iconX } from "../icons.js";
 
 const TYPES = { binary: "Да / Нет", scale: "Шкала", flag: "Флаг нарушения (без баллов)" };
@@ -300,6 +300,7 @@ class Editor {
         h("ul", { class: "errors" }, v.errors.map((e) => h("li", {}, e)))) : null,
       v.warnings.length ? h("div", { class: "alert alert-warn small" }, h("ul", { class: "errors" }, v.warnings.map((w) => h("li", {}, w)))) : null,
       !v.errors.length && !v.warnings.length ? h("div", { class: "muted small" }, "Ошибок и предупреждений нет") : null,
+      this.impactPanel(),
       saveBtn,
       dirty ? h("button", { class: "btn btn-sm btn-ghost", type: "button", onclick: () => { if (confirm("Отменить все несохранённые изменения?")) { this.draft = clone(this.base); this.changed(true); } } }, "Отменить изменения") : null,
       h("button", { class: "btn btn-sm btn-ghost", type: "button", onclick: () => this.saveAsNew() }, "Сохранить как новый чек-лист…"),
@@ -341,6 +342,53 @@ class Editor {
     } catch (e) {
       toast(e.message, "error");
     }
+  }
+
+  // Предпросмотр влияния на набор: БЕЗ сохранения и БЕЗ вызова LLM — точно по кэшу критериев
+  // (та же логика, что при реальной оценке), сколько диалогов затронет правка и примерная стоимость.
+  impactPanel() {
+    const disabled = this.validation.errors.length > 0;
+    const group = h("input", { class: "input input-sm", value: pref("group") || "DEV", "aria-label": "group_id", placeholder: "group_id" });
+    const out = h("div", {});
+    const btn = h("button", { class: "btn btn-sm", type: "button", disabled,
+      title: disabled ? "Сначала исправьте ошибки валидации" : "Проверить без вызова модели и без сохранения",
+      onclick: async () => {
+        const g = group.value.trim();
+        if (!g) return;
+        btn.disabled = true;
+        clear(out).append(spinner("Считаю…"));
+        try {
+          const r = await api.estimateImpact(g, { checklist: this.draft, samples: samplesPref(), provider: providerPref() });
+          setPref("group", g);
+          clear(out).append(this.renderImpact(r));
+        } catch (e) {
+          clear(out).append(h("div", { class: "muted small" }, e.message));
+        } finally {
+          btn.disabled = disabled;
+        }
+      } }, "Оценить влияние на набор");
+    return h("div", { class: "subpanel" },
+      h("div", { class: "field-label" }, "Сколько реально вызовов модели потребуется для этой правки — до запуска оценки"),
+      h("div", { class: "apply-row" }, group, btn),
+      out);
+  }
+
+  renderImpact(r) {
+    const changes = r.changes?.length ? h("ul", { class: "errors small" }, r.changes.map((c) => h("li", {},
+      h("strong", {}, c.criterion_id), ` ${CHANGE[c.change]}`,
+      c.fields.length ? ` (${c.fields.map((f) => FIELD[f] || f).join(", ")})` : "",
+      h("span", { class: c.llm ? "chip chip-partial" : "chip chip-na" }, c.llm ? "переоценка LLM" : "только пересчёт"))))
+      : h("div", { class: "muted small" }, "По сравнению с сохранённой версией критерии не менялись.");
+    return h("div", { class: "impact-result" },
+      changes,
+      h("div", { class: "stats" },
+        stat(r.total_conversations, "диалогов в наборе"),
+        stat(r.fully_cached_conversations, "уже полностью из кэша"),
+        stat(r.estimated_new_calls, "новых вызовов модели"),
+        stat(r.estimated_cost_usd !== null ? `~$${r.estimated_cost_usd}` : "—", "примерная стоимость",
+          r.estimated_cost_usd === null ? "Нет истории вызовов для оценки токенов — появится после первой реальной оценки модели" : "")),
+      h("div", { class: "muted small" },
+        `Модель: ${r.model}${r.rule_based_criteria ? ` · ${r.rule_based_criteria} критериев аудио решаются правилом, без LLM` : ""}`));
   }
 
   applyPanel() {
@@ -419,6 +467,10 @@ function textarea(value, onInput, rows = 3) {
   const t = h("textarea", { class: "input textarea", rows: String(rows), oninput: (e) => onInput(e.target.value) });
   t.value = value ?? "";
   return t;
+}
+
+function stat(value, label, hint) {
+  return h("div", { class: "stat", title: hint || "" }, h("div", { class: "stat-value" }, String(value)), h("div", { class: "stat-label" }, label));
 }
 
 function numberInput(value, onInput, attrs = {}) {

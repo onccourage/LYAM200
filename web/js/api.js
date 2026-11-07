@@ -67,6 +67,8 @@ export const api = {
       { query: { checklist_id: checklistId, checklist_version: checklistVersion, full, samples, provider } }),
   analytics: (groupId, checklistId) => request("GET", `/datasets/${enc(groupId)}/analytics`, { query: { checklist_id: checklistId } }),
   datasetStats: (groupId) => request("GET", `/datasets/${enc(groupId)}/stats`),
+  estimateImpact: (groupId, payload) => request("POST", `/datasets/${enc(groupId)}/impact`, { body: payload }),
+  goldAgreement: (groupId, checklistId) => request("GET", `/datasets/${enc(groupId)}/gold-agreement`, { query: { checklist_id: checklistId } }),
   startBatch: (payload) => request("POST", "/batches", { body: payload }),
   getBatch: (id) => request("GET", `/batches/${id}`),
   listBatches: (groupId, limit = 1) => request("GET", "/batches", { query: { group_id: groupId, limit } }),

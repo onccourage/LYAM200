@@ -18,7 +18,8 @@ from .analytics import compute as compute_analytics
 from .appeals import AppealError, appeal_details, create_appeal, resolve_appeal
 from .batch import BatchManager
 from .checklists import diff as checklist_diff
-from .evaluator import evaluate_conversation
+from .evaluator import estimate_impact, evaluate_conversation
+from .gold import compare as gold_compare, load_gold
 from .llm import LLMError, get_provider
 from .models import Checklist, Conversation
 from .seed import autoload
@@ -276,9 +277,68 @@ def api_analytics(group_id: str, checklist_id: str | None = None) -> dict:
     return compute_analytics(group_id, checklist_id)
 
 
+@app.get("/api/datasets/{group_id}/gold-agreement")
+def api_gold_agreement(group_id: str, checklist_id: str = "default_chat") -> dict:
+    """Согласие текущих оценок с эталонной (человеческой) разметкой data/gold/*.json — тот же расчёт,
+    что в scripts/eval_gold.py, но живьём в UI (критерий жюри «точность vs Ground Truth»)."""
+    gold = [g for g in load_gold(settings.data_dir / "gold") if g.get("group_id", group_id) == group_id]
+    total_slots = sum(len(g.get("answers") or {}) for g in gold)
+    filled = sum(1 for g in gold for v in (g.get("answers") or {}).values() if v not in (None, "", {}))
+    if not gold:
+        return {"available": False, "reason": "Эталонная разметка для набора не найдена (data/gold/*.json)",
+                "gold_files": 0, "annotation_progress": {"filled": 0, "total": 0}}
+    convs = {c.conversation_id: c for c in db.list_conversations(group_id)}
+    default_cl = db.get_checklist(checklist_id)
+    evals: dict[str, dict] = {}
+    cls: dict[tuple, Checklist] = {}
+    for g in gold:
+        ev = db.get_current_evaluation(group_id, g["conversation_id"])
+        if ev:
+            evals[g["conversation_id"]] = ev
+            key = (ev["checklist_id"], ev["checklist_version"])
+            if key not in cls:
+                cls[key] = db.get_checklist(*key)
+    result = gold_compare(gold, evals, convs, cls, default_cl)
+    result["available"] = True
+    result["gold_files"] = len(gold)
+    result["annotation_progress"] = {"filled": filled, "total": total_slots}
+    return result
+
+
 @app.get("/api/datasets/{group_id}/stats")
 def api_dataset_stats(group_id: str) -> dict:
     return db.dataset_stats(group_id)
+
+
+class ImpactRequest(BaseModel):
+    checklist: dict                             # черновик из редактора — можно ещё не сохранённый
+    conversation_ids: list[str] | None = None    # None — весь набор
+    samples: int = 1
+    provider: str = "default"
+
+
+@app.post("/api/datasets/{group_id}/impact")
+def api_impact(group_id: str, req: ImpactRequest) -> dict:
+    """Предпросмотр влияния правки чек-листа на набор БЕЗ вызова LLM и без сохранения: сколько диалогов
+    уже полностью из кэша, сколько критериев реально уйдёт в модель и примерная стоимость. Для редактора
+    чек-листа — проверить правку до того, как тратить вызовы на весь набор (контрольный час, раздел 9)."""
+    cl = _parse_checklist(req.checklist)
+    try:
+        profile = settings.get_profile(req.provider)
+    except KeyError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if req.conversation_ids:
+        convs = [c for c in (db.get_conversation(group_id, cid) for cid in req.conversation_ids) if c]
+    else:
+        convs = db.list_conversations(group_id)
+    if not convs:
+        raise HTTPException(status_code=404, detail="Набор пуст или не найден")
+    result = estimate_impact(cl, convs, model=profile.model, samples=req.samples,
+                             price_input_per_mtok=profile.price_input_per_mtok,
+                             price_output_per_mtok=profile.price_output_per_mtok)
+    saved = db.get_checklist(cl.id)   # последняя сохранённая версия — для читаемого списка изменений
+    result["changes"] = checklist_diff(saved, cl) if saved else []
+    return result
 
 
 # ---------------------------------------------------------------- batches

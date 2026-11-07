@@ -244,3 +244,54 @@ async def evaluate_conversation(
         record["id"] = db.save_evaluation(record, path=db_path)
     return EvalOutcome(record=record, verdicts=verdicts, usage=usage,
                        llm_criteria=[c.id for c in missing], cached_criteria=cached_ids)
+
+
+def estimate_impact(checklist: Checklist, conversations: list[Conversation], *, model: str, samples: int = 1,
+                    price_input_per_mtok: Decimal | None = None, price_output_per_mtok: Decimal | None = None,
+                    db_path: Path | None = None) -> dict:
+    """Предпросмотр влияния чек-листа (в т.ч. несохранённого черновика) на набор — БЕЗ обращения к LLM.
+
+    Прогоняет ровно ту же логику кэш-ключей, что и evaluate_conversation (applies_to_channel,
+    requires_audio → правило, cache_key, дробление на чанки), поэтому число "новых вызовов" точное,
+    а не на глазок: по каждому диалогу реально проверяется, какие критерии уже есть в кэше критериев.
+    Стоимость/токены — оценка по исторической средней на вызов (app.db.avg_tokens_per_call), так как
+    точный размер токенов до реального вызова модели не известен.
+    """
+    samples = max(1, min(7, samples))
+    cached = llm_needed = rule_based = fully_cached = new_calls = 0
+    for conv in conversations:
+        applicable = [c for c in checklist.enabled_criteria if applies_to_channel(c, conv.channel)]
+        to_llm = [c for c in applicable if not c.requires_audio]
+        rule_based += len(applicable) - len(to_llm)
+        t_hash = conv.transcript_hash()
+        keys = {c.id: cache_key(t_hash, c, model, samples) for c in to_llm}
+        hits = db.cache_get_many(list(keys.values()), path=db_path) if keys else {}
+        missing = [c for c in to_llm if keys[c.id] not in hits]
+        cached += len(to_llm) - len(missing)
+        llm_needed += len(missing)
+        calls = len(_chunk(missing, settings.llm_criteria_chunk_size)) * samples if missing else 0
+        new_calls += calls
+        if calls == 0:
+            fully_cached += 1
+
+    avg_in, avg_out = db.avg_tokens_per_call(path=db_path)
+    est_in = est_out = est_cost = None
+    if avg_in is not None and new_calls:
+        est_in, est_out = round(avg_in * new_calls), round(avg_out * new_calls)
+        p_in = settings.price_input_per_mtok if price_input_per_mtok is None else price_input_per_mtok
+        p_out = settings.price_output_per_mtok if price_output_per_mtok is None else price_output_per_mtok
+        mtok = Decimal(1_000_000)
+        est_cost = str((Decimal(est_in) * p_in / mtok + Decimal(est_out) * p_out / mtok).quantize(Decimal("0.0001")))
+    return {
+        "total_conversations": len(conversations),
+        "fully_cached_conversations": fully_cached,
+        "cached_criteria": cached,
+        "llm_criteria": llm_needed,
+        "rule_based_criteria": rule_based,
+        "estimated_new_calls": new_calls,
+        "estimated_tokens_in": est_in,
+        "estimated_tokens_out": est_out,
+        "estimated_cost_usd": est_cost,
+        "model": model,
+        "samples": samples,
+    }
