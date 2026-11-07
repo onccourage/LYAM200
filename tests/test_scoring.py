@@ -33,7 +33,7 @@ def test_all_max_is_100(cl):
 def test_c06_7_gives_95_50(cl):
     r = score(cl, ans(c06=7))
     assert str(r.total) == "95.50"
-    assert crit(r, "c06").points == Decimal("10.5")
+    assert crit(r, "c06").points == Decimal("10.5") and crit(r, "c06").points_display == "10.5"
 
 
 def test_na_redistribution_65(cl):

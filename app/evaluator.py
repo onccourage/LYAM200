@@ -143,7 +143,10 @@ async def evaluate_conversation(
         status = "done" if not result.is_partial else "partial"
     except ScoringError as e:  # не должно случаться после валидации — но не роняем диалог
         score_json, total, gross, status = {"error": str(e), "errors": e.errors}, None, False, "error"
-    if llm_error and status != "error":
+    llm_failed_all = bool(missing) and all(verdicts[c.id].status != "ok" for c in missing)
+    if llm_error and llm_failed_all and not cached_ids:
+        status = "error"  # модель недоступна: такую оценку не сохраняем, текущая остаётся прежней
+    elif llm_error and status != "error":
         status = "partial"
 
     ordered = [verdicts[c.id] for c in checklist.enabled_criteria if c.id in verdicts]
@@ -166,7 +169,7 @@ async def evaluate_conversation(
         "raw_responses": raw_log,
         "llm_error": llm_error,
     }
-    if save:
+    if save and status != "error":
         record["id"] = db.save_evaluation(record, path=db_path)
     return EvalOutcome(record=record, verdicts=verdicts, usage=usage,
                        llm_criteria=[c.id for c in missing], cached_criteria=cached_ids)

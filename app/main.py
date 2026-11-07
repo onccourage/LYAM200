@@ -89,7 +89,15 @@ def api_list_datasets() -> list[dict]:
 
 @app.get("/api/datasets/{group_id}/conversations")
 def api_list_conversations(group_id: str) -> list[dict]:
-    return [_summary(c) for c in db.list_conversations(group_id)]
+    """Диалоги набора + сводка текущей оценки (для списка и фильтров)."""
+    evals = {e["conversation_id"]: e for e in db.list_current_evaluations(group_id)}
+    out = []
+    for c in db.list_conversations(group_id):
+        row = _summary(c)
+        row["preview"] = next((" ".join(m.text.split())[:120] for m in c.messages if m.speaker == "client"), "")
+        row["evaluation"] = evals.get(c.conversation_id)
+        out.append(row)
+    return out
 
 
 @app.get("/api/conversations/{group_id}/{conversation_id}")
@@ -166,11 +174,15 @@ async def api_evaluate(group_id: str, conversation_id: str, checklist_id: str = 
     cl = db.get_checklist(checklist_id, checklist_version)
     if cl is None:
         raise HTTPException(status_code=404, detail="Чек-лист не найден")
+    if settings.llm_provider == "anthropic" and not settings.anthropic_api_key:
+        raise HTTPException(status_code=503, detail="ANTHROPIC_API_KEY не задан в .env — оценка недоступна")
     try:
         provider = get_provider()
     except LLMError as e:
         raise HTTPException(status_code=503, detail=str(e))
     out = await evaluate_conversation(conv, cl, provider, use_cache=not full)
+    if out.record["status"] == "error":
+        raise HTTPException(status_code=502, detail=f"Модель недоступна: {out.record['llm_error']}")
     rec = dict(out.record)
     rec.pop("raw_responses", None)
     return {**rec, "llm_criteria": out.llm_criteria, "cached_criteria": out.cached_criteria}
@@ -195,6 +207,9 @@ def api_list_evaluations(group_id: str) -> list[dict]:
 
 if settings.web_dir.exists():
     app.mount("/static", StaticFiles(directory=settings.web_dir), name="static")
+    for sub in ("js", "css"):
+        if (settings.web_dir / sub).exists():
+            app.mount(f"/{sub}", StaticFiles(directory=settings.web_dir / sub), name=sub)
 
 
 @app.get("/", include_in_schema=False)

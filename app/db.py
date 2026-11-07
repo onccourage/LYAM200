@@ -347,11 +347,19 @@ def get_current_evaluation(group_id: str, conversation_id: str, path: Path | Non
 
 
 def list_current_evaluations(group_id: str, path: Path | None = None) -> list[dict]:
-    """Без сырых ответов — для списков."""
+    """Без сырых ответов — для списков. pending_count — критерии на ручной проверке."""
     with connect(path) as conn:
         rows = conn.execute(
             "SELECT id, group_id, conversation_id, checklist_id, checklist_version, model, prompt_version, status, "
-            "total, gross_error, tokens_in, tokens_out, llm_calls, cost, created_at FROM evaluations "
+            "total, gross_error, tokens_in, tokens_out, llm_calls, cost, created_at, score_json FROM evaluations "
             "WHERE group_id=? AND is_current=1", (group_id,),
         ).fetchall()
-    return [dict(r, gross_error=bool(r["gross_error"])) for r in rows]
+    out = []
+    for r in rows:
+        d = dict(r)
+        score = json.loads(d.pop("score_json") or "null") or {}
+        d["gross_error"] = bool(d["gross_error"])
+        d["gross_types"] = score.get("gross_types", [])
+        d["pending_count"] = len(score.get("pending", []))
+        out.append(d)
+    return out

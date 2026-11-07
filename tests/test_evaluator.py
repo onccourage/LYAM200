@@ -97,8 +97,9 @@ def test_llm_error_is_partial(tmp_db, cl, conv):
 
     out = run(evaluate_conversation(conv, cl, Broken(lambda *a: {}), db_path=tmp_db))
     r = out.record
-    assert r["status"] == "partial" and r["llm_error"] and r["total"] is None
+    assert r["status"] == "error" and r["llm_error"] and r["total"] is None
     assert all(a["status"] == "needs_review" for a in r["answers"])
+    assert "id" not in r and db.get_current_evaluation("MOCK", conv.conversation_id, path=tmp_db) is None
 
 
 def test_audio_and_channel_rules(tmp_db, default_checklist_dict, mock_payload):

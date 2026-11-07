@@ -26,7 +26,11 @@ def test_api_smoke(tmp_path, monkeypatch, mock_payload):
         assert body["source"] == "cache" and body["total"] == 4
 
         convs = client.get("/api/datasets/MOCK/conversations").json()
-        assert len(convs) == 4
+        assert len(convs) == 4 and all(c["evaluation"] is None for c in convs)
+        assert next(c for c in convs if c["conversation_id"] == "mock-ru-001")["preview"] == "Не могу вывести деньги со счёта"
+        assert client.get("/api/evaluations/MOCK/mock-ru-001").status_code == 404
+        assert client.post("/api/evaluations/MOCK/mock-ru-001").status_code in (503, 200)
+        assert client.get("/js/app.js").status_code == 200 and client.get("/css/styles.css").status_code == 200
         conv = client.get("/api/conversations/MOCK/mock-call-001").json()
         assert conv["messages"][0]["timestamp"] == "2026-11-06T10:15:02+05:00"
 

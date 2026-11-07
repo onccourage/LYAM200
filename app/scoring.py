@@ -60,6 +60,7 @@ class CriterionScore(BaseModel):
     effective_points: Decimal | None = None   # вклад в итог из 100 (точно)
     effective_weight_display: str | None = None
     effective_points_display: str | None = None
+    points_display: str | None = None          # баллы в исходных весах, округлённые для показа
     na_reason: str | None = None       # для na_channel — системная причина
     gross_types: list[str] = Field(default_factory=list)
 
@@ -217,7 +218,8 @@ def score(checklist: Checklist, answers: Any, channel: str | None = None) -> Sco
         else:
             points = c.weight * value / c.scale_max
         rows.append(CriterionScore(**base, status="scored", answer=_fmt(value) if kind == "scale" else kind,
-                                   points=points, max_points=c.weight))
+                                   points=points, max_points=c.weight,
+                                   points_display=_fmt(_q(points, digits))))
 
     if errors:
         raise ScoringError(errors)
