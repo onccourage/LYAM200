@@ -75,8 +75,8 @@ function table(head, rows) {
 
 // --- точность против эталона (data/gold/*.json) — тот же расчёт, что scripts/eval_gold.py
 function goldCard(gold) {
-  const TITLE = "Точность против эталона (Ground Truth)";
-  const HINT = "data/gold/*.json — ручная разметка диалогов экспертом; шаблоны: scripts/gold_template.py.";
+  const TITLE = "Точность против эталона (наша ручная разметка)";
+  const HINT = "data/gold/*.json — ручная разметка диалогов командой; шаблоны: scripts/gold_template.py.";
   if (!gold.available) {
     return card(TITLE, HINT, h("div", { class: "empty" }, gold.reason || "Разметка не найдена."), null);
   }
