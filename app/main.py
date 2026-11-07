@@ -8,11 +8,12 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from . import db
 from .config import settings
 from .dataset import DatasetError, LoadResult, load_dataset, load_upload
+from .batch import BatchManager
 from .evaluator import evaluate_conversation
 from .llm import LLMError, get_provider
 from .models import Checklist, Conversation
@@ -22,10 +23,12 @@ from .models import Checklist, Conversation
 async def lifespan(_: FastAPI):
     db.init_db()
     db.seed_checklists()
+    db.mark_running_jobs_interrupted()
     yield
 
 
 app = FastAPI(title="CQA — Conversation Quality Analytics", lifespan=lifespan)
+batches = BatchManager()
 
 
 # ---------------------------------------------------------------- helpers
@@ -174,8 +177,7 @@ async def api_evaluate(group_id: str, conversation_id: str, checklist_id: str = 
     cl = db.get_checklist(checklist_id, checklist_version)
     if cl is None:
         raise HTTPException(status_code=404, detail="Чек-лист не найден")
-    if settings.llm_provider == "anthropic" and not settings.anthropic_api_key:
-        raise HTTPException(status_code=503, detail="ANTHROPIC_API_KEY не задан в .env — оценка недоступна")
+    _require_llm()
     try:
         provider = get_provider()
     except LLMError as e:
@@ -201,6 +203,82 @@ def api_get_evaluation(group_id: str, conversation_id: str, raw: bool = False) -
 @app.get("/api/datasets/{group_id}/evaluations")
 def api_list_evaluations(group_id: str) -> list[dict]:
     return db.list_current_evaluations(group_id)
+
+
+@app.get("/api/datasets/{group_id}/stats")
+def api_dataset_stats(group_id: str) -> dict:
+    return db.dataset_stats(group_id)
+
+
+# ---------------------------------------------------------------- batches
+
+class BatchRequest(BaseModel):
+    group_id: str
+    conversation_ids: list[str] | None = None   # None/пусто — весь набор
+    checklist_id: str = "default_chat"
+    checklist_version: int | None = None        # None — последняя версия
+    full: bool = False                          # сбросить кэш критериев
+    skip_evaluated: bool = True                 # пропустить уже оценённые этой версией
+
+
+def _require_llm() -> None:
+    if settings.llm_provider == "anthropic" and not settings.anthropic_api_key:
+        raise HTTPException(status_code=503, detail="ANTHROPIC_API_KEY не задан в .env — оценка недоступна")
+
+
+@app.post("/api/batches")
+async def api_start_batch(req: BatchRequest) -> dict:
+    _require_llm()
+    cl = db.get_checklist(req.checklist_id, req.checklist_version)
+    if cl is None:
+        raise HTTPException(status_code=404, detail="Чек-лист не найден")
+    existing = {c.conversation_id for c in db.list_conversations(req.group_id)}
+    if not existing:
+        raise HTTPException(status_code=404, detail=f"Набор {req.group_id} не загружен")
+    ids = req.conversation_ids or sorted(existing)
+    unknown = [i for i in ids if i not in existing]
+    if unknown:
+        raise HTTPException(status_code=400, detail=f"Нет таких диалогов в наборе: {unknown[:10]}")
+    active = batches.active_for(req.group_id)
+    if active:
+        raise HTTPException(status_code=409, detail=f"Для набора уже идёт пакетная оценка #{active}")
+    job_id = batches.submit(req.group_id, cl, ids, full=req.full, skip_evaluated=req.skip_evaluated)
+    return db.get_batch_job(job_id)
+
+
+@app.get("/api/batches")
+def api_list_batches(group_id: str | None = None, limit: int = 10) -> list[dict]:
+    return db.list_batch_jobs(group_id, limit)
+
+
+@app.get("/api/batches/{job_id}")
+def api_get_batch(job_id: int) -> dict:
+    job = db.get_batch_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Задание не найдено")
+    return job
+
+
+@app.post("/api/batches/{job_id}/cancel")
+def api_cancel_batch(job_id: int) -> dict:
+    if not batches.cancel(job_id):
+        raise HTTPException(status_code=409, detail="Задание не выполняется")
+    return {"ok": True}
+
+
+@app.post("/api/batches/{job_id}/resume")
+async def api_resume_batch(job_id: int) -> dict:
+    _require_llm()
+    job = db.get_batch_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Задание не найдено")
+    if job["status"] in ("running", "queued"):
+        raise HTTPException(status_code=409, detail="Задание уже выполняется")
+    active = batches.active_for(job["group_id"])
+    if active:
+        raise HTTPException(status_code=409, detail=f"Для набора уже идёт пакетная оценка #{active}")
+    batches.resume(job_id)
+    return db.get_batch_job(job_id)
 
 
 # ---------------------------------------------------------------- static

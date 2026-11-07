@@ -134,6 +134,20 @@ h1, h2, h3 { margin: 0; line-height: 1.25; }
 .total-cell { font-weight: 700; }
 .row-tags { display: none; font-size: 12px; color: var(--muted); }
 
+/* ---------- batch & stats */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin-bottom: 12px; }
+.stat { background: var(--surface-2); border-radius: 8px; padding: 8px 10px; }
+.stat-value { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.stat-label { font-size: 12px; color: var(--muted); }
+.batch { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.batch-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.check { display: inline-flex; gap: 6px; align-items: center; font-size: 14px; color: var(--muted); cursor: pointer; }
+.batch-progress { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; }
+.batch-line { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.bar-lg { height: 10px; }
+.col-check { width: 28px; }
+.col-check input { width: 16px; height: 16px; cursor: pointer; }
+
 /* ---------- conversation */
 .conv-head { display: flex; flex-direction: column; gap: 6px; }
 .back { font-size: 14px; }

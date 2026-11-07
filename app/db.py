@@ -76,6 +76,31 @@ CREATE TABLE IF NOT EXISTS criterion_cache (
     created_at       TEXT NOT NULL
 );
 
+-- Пакетные задания: прогресс хранится в БД → переживает перезапуск, можно продолжить.
+CREATE TABLE IF NOT EXISTS batch_jobs (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    group_id           TEXT NOT NULL,
+    checklist_id       TEXT NOT NULL,
+    checklist_version  INTEGER NOT NULL,
+    conversation_ids   TEXT NOT NULL,        -- JSON-массив
+    full               INTEGER NOT NULL DEFAULT 0,
+    skip_evaluated     INTEGER NOT NULL DEFAULT 1,
+    status             TEXT NOT NULL,        -- queued | running | done | cancelled | interrupted | failed
+    total              INTEGER NOT NULL,
+    processed          INTEGER NOT NULL DEFAULT 0,
+    succeeded          INTEGER NOT NULL DEFAULT 0,
+    partial            INTEGER NOT NULL DEFAULT 0,
+    failed             INTEGER NOT NULL DEFAULT 0,
+    skipped            INTEGER NOT NULL DEFAULT 0,
+    llm_calls          INTEGER NOT NULL DEFAULT 0,
+    cost               TEXT NOT NULL DEFAULT '0',
+    errors_json        TEXT NOT NULL DEFAULT '[]',
+    current_json       TEXT NOT NULL DEFAULT '[]', -- что обрабатывается сейчас
+    created_at         TEXT NOT NULL,
+    updated_at         TEXT NOT NULL,
+    finished_at        TEXT
+);
+
 CREATE TABLE IF NOT EXISTS appeals (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
     evaluation_id    INTEGER NOT NULL REFERENCES evaluations(id),
@@ -95,7 +120,7 @@ CREATE TABLE IF NOT EXISTS appeals (
 
 
 def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(timezone.utc).isoformat(timespec="microseconds")
 
 
 @contextmanager
@@ -363,3 +388,94 @@ def list_current_evaluations(group_id: str, path: Path | None = None) -> list[di
         d["pending_count"] = len(score.get("pending", []))
         out.append(d)
     return out
+
+
+# ---------------------------------------------------------------- пакетные задания
+
+def create_batch_job(group_id: str, checklist_id: str, checklist_version: int, conversation_ids: list[str],
+                     full: bool, skip_evaluated: bool, path: Path | None = None) -> int:
+    ts = now_iso()
+    with connect(path) as conn:
+        cur = conn.execute(
+            "INSERT INTO batch_jobs(group_id, checklist_id, checklist_version, conversation_ids, full, skip_evaluated, "
+            "status, total, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (group_id, checklist_id, checklist_version, json.dumps(conversation_ids), int(full), int(skip_evaluated),
+             "queued", len(conversation_ids), ts, ts),
+        )
+        return cur.lastrowid
+
+
+def update_batch_job(job_id: int, path: Path | None = None, **fields) -> None:
+    if not fields:
+        return
+    for k in ("errors", "current"):
+        if k in fields:
+            fields[f"{k}_json"] = json.dumps(fields.pop(k), ensure_ascii=False)
+    fields["updated_at"] = now_iso()
+    cols = ", ".join(f"{k}=?" for k in fields)
+    with connect(path) as conn:
+        conn.execute(f"UPDATE batch_jobs SET {cols} WHERE id=?", (*fields.values(), job_id))
+
+
+def _job_row(r: sqlite3.Row) -> dict:
+    d = dict(r)
+    d["conversation_ids"] = json.loads(d["conversation_ids"])
+    d["errors"] = json.loads(d.pop("errors_json"))
+    d["current"] = json.loads(d.pop("current_json"))
+    d["full"] = bool(d["full"])
+    d["skip_evaluated"] = bool(d["skip_evaluated"])
+    return d
+
+
+def get_batch_job(job_id: int, path: Path | None = None) -> dict | None:
+    with connect(path) as conn:
+        r = conn.execute("SELECT * FROM batch_jobs WHERE id=?", (job_id,)).fetchone()
+    return _job_row(r) if r else None
+
+
+def list_batch_jobs(group_id: str | None = None, limit: int = 20, path: Path | None = None) -> list[dict]:
+    with connect(path) as conn:
+        if group_id:
+            rows = conn.execute("SELECT * FROM batch_jobs WHERE group_id=? ORDER BY id DESC LIMIT ?", (group_id, limit)).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM batch_jobs ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+    return [_job_row(r) for r in rows]
+
+
+def mark_running_jobs_interrupted(path: Path | None = None) -> int:
+    """При старте сервера: задания, оборванные падением процесса, можно продолжить."""
+    with connect(path) as conn:
+        cur = conn.execute("UPDATE batch_jobs SET status='interrupted', current_json='[]', updated_at=? "
+                           "WHERE status IN ('running','queued')", (now_iso(),))
+        return cur.rowcount
+
+
+def dataset_stats(group_id: str, path: Path | None = None) -> dict:
+    """Стоимость: по ВСЕЙ истории оценок набора (включая ретраи и инкрементальные переоценки)."""
+    with connect(path) as conn:
+        hist = conn.execute(
+            "SELECT conversation_id, cost, tokens_in, tokens_out, llm_calls FROM evaluations WHERE group_id=?", (group_id,)
+        ).fetchall()
+        cur = conn.execute(
+            "SELECT total, gross_error, status FROM evaluations WHERE group_id=? AND is_current=1", (group_id,)
+        ).fetchall()
+        n_conv = conn.execute("SELECT COUNT(*) FROM conversations WHERE group_id=?", (group_id,)).fetchone()[0]
+    from decimal import ROUND_HALF_UP, Decimal
+    spent = sum((Decimal(r["cost"]) for r in hist), Decimal(0))
+    evaluated_convs = {r["conversation_id"] for r in hist}
+    per_conv = (spent / len(evaluated_convs)) if evaluated_convs else None
+    full_runs = [r for r in hist if r["llm_calls"] > 0]
+    totals = [Decimal(r["total"]) for r in cur if r["total"] is not None]
+    return {
+        "conversations": n_conv,
+        "evaluated": len(cur),
+        "needs_review": sum(1 for r in cur if r["status"] == "partial"),
+        "gross_errors": sum(1 for r in cur if r["gross_error"]),
+        "avg_total": str((sum(totals, Decimal(0)) / len(totals)).quantize(Decimal("0.01"), ROUND_HALF_UP)) if totals else None,
+        "spent": str(spent.quantize(Decimal("0.0001"), ROUND_HALF_UP)),
+        "avg_cost_per_conversation": str(per_conv.quantize(Decimal("0.0001"), ROUND_HALF_UP)) if per_conv is not None else None,
+        "avg_cost_per_llm_evaluation": str((sum((Decimal(r["cost"]) for r in full_runs), Decimal(0)) / len(full_runs)).quantize(Decimal("0.0001"), ROUND_HALF_UP)) if full_runs else None,
+        "avg_tokens_in": round(sum(r["tokens_in"] for r in full_runs) / len(full_runs)) if full_runs else None,
+        "avg_tokens_out": round(sum(r["tokens_out"] for r in full_runs) / len(full_runs)) if full_runs else None,
+        "evaluations_total": len(hist),
+    }

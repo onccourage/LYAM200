@@ -3,6 +3,7 @@ import { api } from "../api.js";
 import { clear, errorBox, h, spinner, toast } from "../dom.js";
 import { CHANNEL, EVAL_STATUS, GROSS } from "../labels.js";
 import { pref, setPref, runtime } from "../state.js";
+import { createBatchPanel, createStats } from "./batch.js";
 
 const FILTERS = { channel: "", language: "", status: "", gross: "", q: "" };
 
@@ -81,7 +82,15 @@ export function renderDatasets(root, { group } = {}) {
         `Набор ${g} ещё не загружен. Нажмите «Загрузить набор».`));
       return;
     }
-    renderList(listBox, g, rows);
+    renderList(listBox, g, rows, () => refreshRows(g));
+  }
+
+  // обновить строки без потери фильтров/выбора (во время пакетной оценки)
+  async function refreshRows(g) {
+    try {
+      const rows = await api.listConversations(g);
+      listBox.dispatchEvent(new CustomEvent("rows", { detail: rows }));
+    } catch { /* следующий тик */ }
   }
 
   showList(groupId);
@@ -94,7 +103,9 @@ function evalStatus(row) {
   return e.status;
 }
 
-function renderList(box, group, rows) {
+function renderList(box, group, initialRows, refresh) {
+  let rows = initialRows;
+  const selected = new Set();
   const uniq = (key) => [...new Set(rows.map((r) => r[key]).filter(Boolean))].sort();
   const select = (key, label, options) => {
     const el = h("select", { class: "input input-sm", "aria-label": label,
@@ -111,23 +122,35 @@ function renderList(box, group, rows) {
     select("gross", "Грубые ошибки: все", [["yes", "Есть грубая ошибка"], ["no", "Без грубых ошибок"]]),
     search);
 
-  const evaluated = rows.filter((r) => r.evaluation);
+  const stats = createStats(group);
+  const batch = createBatchPanel({
+    group,
+    getSelected: () => [...selected],
+    onProgress: () => { refresh(); stats.refresh(); },
+    onFinished: () => { refresh(); stats.refresh(); },
+  });
+
+  const headCount = h("span", { class: "muted" });
   const counter = h("div", { class: "muted small" });
+  const selectAll = h("input", { type: "checkbox", "aria-label": "Выбрать все показанные",
+    onchange: () => { for (const r of visible()) selectAll.checked ? selected.add(r.conversation_id) : selected.delete(r.conversation_id); draw(); } });
   const tbody = h("tbody");
   const table = h("div", { class: "table-wrap" }, h("table", { class: "table" },
     h("thead", {}, h("tr", {},
+      h("th", { class: "col-check" }, selectAll),
       h("th", {}, "Диалог"), h("th", { class: "col-opt" }, "Канал"), h("th", { class: "col-opt" }, "Язык"),
       h("th", { class: "num col-opt" }, "Реплик"), h("th", { class: "num" }, "Итог"), h("th", {}, "Статус"),
       h("th", { class: "col-opt" }, "Чек-лист"))),
     tbody));
 
   box.replaceChildren(
-    h("div", { class: "panel-head" }, h("h2", {}, `Набор ${group}`),
-      h("span", { class: "muted" }, `${rows.length} диалогов, оценено ${evaluated.length}`)),
-    filters, counter, table);
+    h("div", { class: "panel-head" }, h("h2", {}, `Набор ${group}`), headCount),
+    stats.el, batch.el, filters, counter, table);
 
-  function draw() {
-    const shown = rows.filter((r) => {
+  box.addEventListener("rows", (ev) => { rows = ev.detail; draw(); });
+
+  function visible() {
+    return rows.filter((r) => {
       if (FILTERS.channel && r.channel !== FILTERS.channel) return false;
       if (FILTERS.language && r.language !== FILTERS.language) return false;
       if (FILTERS.status && evalStatus(r) !== FILTERS.status) return false;
@@ -136,13 +159,20 @@ function renderList(box, group, rows) {
       if (FILTERS.q && !(`${r.conversation_id} ${r.preview}`.toLowerCase().includes(FILTERS.q))) return false;
       return true;
     });
+  }
+
+  function draw() {
+    const shown = visible();
+    headCount.textContent = `${rows.length} диалогов, оценено ${rows.filter((r) => r.evaluation).length}`;
     counter.textContent = shown.length === rows.length ? "" : `Показано ${shown.length} из ${rows.length}`;
-    tbody.replaceChildren(...shown.map((r) => row(group, r)));
+    selectAll.checked = shown.length > 0 && shown.every((r) => selected.has(r.conversation_id));
+    tbody.replaceChildren(...shown.map((r) => row(group, r, selected, () => { draw(); })));
+    batch.selectionChanged(selected.size);
   }
   draw();
 }
 
-function row(group, r) {
+function row(group, r, selected, onSelect) {
   const e = r.evaluation;
   const href = `#/c/${encodeURIComponent(group)}/${encodeURIComponent(r.conversation_id)}`;
   const st = evalStatus(r);
@@ -152,6 +182,9 @@ function row(group, r) {
     e?.gross_error ? h("span", { class: "badge-gross", title: (e.gross_types || []).map((g) => GROSS[g] || g).join(", ") }, "Грубая ошибка") : null);
   const tr = h("tr", { class: "row-link", tabindex: "0", onclick: () => (location.hash = href),
     onkeydown: (ev) => { if (ev.key === "Enter") location.hash = href; } },
+  h("td", { class: "col-check", onclick: (ev) => ev.stopPropagation() },
+    h("input", { type: "checkbox", "aria-label": `Выбрать ${r.conversation_id}`, checked: selected.has(r.conversation_id),
+      onchange: (ev) => { ev.target.checked ? selected.add(r.conversation_id) : selected.delete(r.conversation_id); onSelect(); } })),
   h("td", {}, h("a", { href, class: "conv-id" }, r.conversation_id),
     h("div", { class: "row-tags" }, `${CHANNEL[r.channel] || r.channel} · ${r.language}`),
     h("div", { class: "preview" }, r.preview)),

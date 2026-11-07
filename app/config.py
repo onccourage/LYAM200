@@ -43,6 +43,8 @@ class Settings:
     explanation_lang: str = field(default_factory=lambda: _env("EXPLANATION_LANG", "ru"))
     long_pause_sec: int = field(default_factory=lambda: int(_env("LONG_PAUSE_SEC", "120")))
     batch_concurrency: int = field(default_factory=lambda: int(_env("BATCH_CONCURRENCY", "5")))
+    batch_retries: int = field(default_factory=lambda: int(_env("BATCH_RETRIES", "2")))  # поверх ретраев SDK
+    batch_retry_base_sec: float = field(default_factory=lambda: float(_env("BATCH_RETRY_BASE_SEC", "5")))
 
     price_input_per_mtok: Decimal = field(default_factory=lambda: Decimal(_env("PRICE_INPUT_PER_MTOK", "2") or "0"))
     price_output_per_mtok: Decimal = field(default_factory=lambda: Decimal(_env("PRICE_OUTPUT_PER_MTOK", "10") or "0"))

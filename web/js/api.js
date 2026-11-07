@@ -64,6 +64,12 @@ export const api = {
   evaluate: (groupId, convId, { checklistId, checklistVersion, full = false } = {}) =>
     request("POST", `/evaluations/${enc(groupId)}/${enc(convId)}`,
       { query: { checklist_id: checklistId, checklist_version: checklistVersion, full } }),
+  datasetStats: (groupId) => request("GET", `/datasets/${enc(groupId)}/stats`),
+  startBatch: (payload) => request("POST", "/batches", { body: payload }),
+  getBatch: (id) => request("GET", `/batches/${id}`),
+  listBatches: (groupId, limit = 1) => request("GET", "/batches", { query: { group_id: groupId, limit } }),
+  cancelBatch: (id) => request("POST", `/batches/${id}/cancel`),
+  resumeBatch: (id) => request("POST", `/batches/${id}/resume`),
   listChecklists: () => request("GET", "/checklists"),
   getChecklist: (id, version) => request("GET", `/checklists/${enc(id)}`, { query: { version } }),
 };
