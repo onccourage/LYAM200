@@ -83,3 +83,27 @@ def test_cost_from_config(monkeypatch):
     u = LLMUsage(input_tokens=1_000_000, output_tokens=100_000, cache_read_input_tokens=1_000_000,
                  cache_creation_input_tokens=1_000_000)
     assert u.cost() == Decimal("2") + Decimal("1") + Decimal("0.2") + Decimal("2.5")
+
+
+def test_openai_compatible_counts_reasoning_tokens(monkeypatch):
+    import httpx
+
+    from app.llm import OpenAICompatibleProvider
+    seen = {}
+
+    def handler(req):
+        seen["body"] = json.loads(req.content)
+        seen["auth"] = req.headers.get("authorization")
+        return httpx.Response(200, json={
+            "model": "gemini-3.5-flash",
+            "choices": [{"finish_reason": "stop", "message": {"content": '{"c01": {"answer": "yes"}}'}}],
+            "usage": {"prompt_tokens": 2713, "completion_tokens": 1029, "total_tokens": 5802},
+        })
+
+    p = OpenAICompatibleProvider(model="gemini-3.5-flash", base_url="https://x.test/v1beta/openai", api_key="k")
+    p.client = httpx.AsyncClient(transport=httpx.MockTransport(handler), headers={"Authorization": "Bearer k"})
+    r = asyncio.run(p.complete_json("S", "U", {"type": "object"}))
+    assert r.data == {"c01": {"answer": "yes"}}
+    assert r.usage.input_tokens == 2713 and r.usage.output_tokens == 5802 - 2713   # «размышления» учтены
+    assert seen["body"]["response_format"]["json_schema"]["schema"] == {"type": "object"}
+    assert seen["auth"] == "Bearer k"

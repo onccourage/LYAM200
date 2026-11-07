@@ -196,7 +196,11 @@ class OpenAICompatibleProvider:
             raise LLMError(f"endpoint недоступен: {last}")
         payload = r.json()
         u = payload.get("usage") or {}
-        usage = LLMUsage(input_tokens=u.get("prompt_tokens", 0), output_tokens=u.get("completion_tokens", 0), calls=1)
+        prompt_t = u.get("prompt_tokens", 0) or 0
+        # «размышления» (Gemini и др.) оплачиваются как выход, но не всегда входят в completion_tokens
+        reasoning = ((u.get("completion_tokens_details") or {}).get("reasoning_tokens") or 0)
+        output_t = max((u.get("completion_tokens", 0) or 0) + reasoning, (u.get("total_tokens", 0) or 0) - prompt_t)
+        usage = LLMUsage(input_tokens=prompt_t, output_tokens=output_t, calls=1)
         text = payload["choices"][0]["message"].get("content") or ""
         try:
             data = _parse_json(text)
