@@ -129,7 +129,7 @@ function decisionForm(a, c, original) {
     opts.map(([val, label]) => h("option", { value: val }, label)));
   const grossBox = h("div", { class: "gross-pick", hidden: true },
     h("div", { class: "muted small" }, "Тип нарушения (хотя бы один):"),
-    Object.entries(GROSS).map(([k, label]) => h("label", { class: "check" }, h("input", { type: "checkbox", value: k }), " ", label)));
+    (c.flag_types || []).map((f) => h("label", { class: "check" }, h("input", { type: "checkbox", value: f.id }), " ", f.label || f.id)));
   const newRow = h("label", { class: "field" }, h("span", { class: "field-label" }, "Новое значение"), select, grossBox);
   const reason = h("textarea", { class: "input textarea", rows: "3", placeholder: "Причина решения (обязательно)" });
   const name = h("input", { class: "input", placeholder: "Имя проверяющего", value: pref("reviewer", "") });
@@ -138,7 +138,7 @@ function decisionForm(a, c, original) {
   function decision() { return panel.querySelector('input[name="decision"]:checked')?.value; }
   function sync() {
     newRow.hidden = decision() !== "changed";
-    grossBox.hidden = !(c.type === "flag" && select.value === "yes");
+    grossBox.hidden = !(c.type === "flag" && select.value === "yes" && (c.flag_types || []).length);
   }
 
   const form = h("form", { class: "decision-form", onsubmit: async (e) => {
@@ -175,7 +175,7 @@ function resultBlock(a, c, ev) {
     h("div", { class: "panel-head" }, h("h2", {}, "Результат")),
     h("dl", { class: "meta meta-lg" },
       h("dt", {}, "Исходная оценка"), h("dd", {}, `${ans(a.original_answer, c.type)}${a.original_points ? ` · ${a.original_points} б.` : ""}`),
-      h("dt", {}, "Решение"), h("dd", {}, `${DECISION[a.decision]}${a.new_gross_types?.length ? ` (${a.new_gross_types.map((g) => GROSS[g] || g).join(", ")})` : ""}`),
+      h("dt", {}, "Решение"), h("dd", {}, `${DECISION[a.decision]}${a.new_gross_types?.length ? ` (${a.new_gross_types.map((g) => (c.flag_types || []).find((f) => f.id === g)?.label || GROSS[g] || g).join(", ")})` : ""}`),
       h("dt", {}, "Финальная оценка"), h("dd", {}, h("strong", {}, ans(a.new_answer, c.type)), a.new_points ? ` · ${a.new_points} б.` : ""),
       h("dt", {}, "Итог диалога"), h("dd", {}, h("strong", {}, `${a.original_total ?? "—"} → ${a.final_total ?? "—"}`)),
       h("dt", {}, "Причина"), h("dd", {}, a.reason),

@@ -2,10 +2,9 @@
 import { api } from "../api.js";
 import { clear, errorBox, h, spinner, toast } from "../dom.js";
 import { CHANNEL } from "../labels.js";
+import { activeChecklist } from "../state.js";
 import { createEvaluationPanel } from "./evaluation.js";
 import { createTranscript } from "./transcript.js";
-
-const DEFAULT_CHECKLIST = "default_chat";
 
 export async function renderConversation(root, { group, conv, focus }) {
   clear(root).append(spinner());
@@ -22,12 +21,13 @@ export async function renderConversation(root, { group, conv, focus }) {
     if (e.status !== 404) toast(e.message, "error");
   }
 
-  const checklistId = evaluation?.checklist_id || DEFAULT_CHECKLIST;
+  // latest — активный чек-лист (им будем переоценивать), usedChecklist — версия, которой оценён диалог
+  const checklistId = activeChecklist();
   let usedChecklist = null, latest = null;
   try {
     latest = (await api.getChecklist(checklistId)).checklist;
-    usedChecklist = evaluation && evaluation.checklist_version !== latest.version
-      ? (await api.getChecklist(checklistId, evaluation.checklist_version)).checklist : latest;
+    usedChecklist = evaluation && (evaluation.checklist_id !== latest.id || evaluation.checklist_version !== latest.version)
+      ? (await api.getChecklist(evaluation.checklist_id, evaluation.checklist_version)).checklist : latest;
   } catch (e) {
     toast(e.message, "error");
   }
@@ -63,7 +63,7 @@ export async function renderConversation(root, { group, conv, focus }) {
 
   if (evaluation && usedChecklist) {
     right.append(createEvaluationPanel({
-      evaluation, checklist: usedChecklist, latestVersion: latest?.version, conversation, transcript,
+      evaluation, checklist: usedChecklist, active: latest, conversation, transcript,
       onReevaluate: reevaluate,
       onChanged: () => renderConversation(root, { group, conv }),
     }));

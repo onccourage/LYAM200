@@ -26,7 +26,6 @@ from pydantic import BaseModel, Field
 
 from .models import Checklist, Criterion
 
-GROSS_TYPES = ("insult", "bypass_service", "confidential_disclosure")
 HUNDRED = Decimal(100)
 
 Status = Literal["scored", "na", "na_channel", "pending", "flag"]
@@ -200,10 +199,11 @@ def score(checklist: Checklist, answers: Any, channel: str | None = None) -> Sco
         if c.type == "flag":
             gtypes: list[str] = []
             if kind == "yes":
-                bad = [g for g in a.gross_types if g not in GROSS_TYPES]
-                if bad:
-                    errors.append(f"{c.id}: неизвестные gross_types {bad}")
-                gtypes = list(dict.fromkeys(a.gross_types))
+                if c.flag_types:
+                    bad = [g for g in a.gross_types if g not in c.flag_type_ids]
+                    if bad:
+                        errors.append(f"{c.id}: неизвестные gross_types {bad}")
+                    gtypes = list(dict.fromkeys(a.gross_types))
             rows.append(CriterionScore(**base, status="na" if kind == "na" else "flag",
                                        answer=kind, gross_types=gtypes))
             continue

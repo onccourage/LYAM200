@@ -14,7 +14,6 @@ from .models import Criterion, Message
 from .preprocess import PreparedConversation
 from .prompt_builder import answer_options
 
-GROSS_TYPES = {"insult", "bypass_service", "confidential_disclosure"}
 ACTOR_SPEAKERS = {"operator", "system"}  # чьи реплики могут подтверждать действие оператора/событие
 _ELLIPSIS = re.compile(r"\s*(?:\.\.\.|…)\s*")
 _WS = re.compile(r"\s+")
@@ -140,11 +139,14 @@ def validate_criterion(c: Criterion, item: Any, prepared: PreparedConversation) 
             errors.append("для N/A обязательна na_reason — какое условие неприменимости выполнено")
     elif c.type == "flag":
         if answer == "yes":
-            bad = [g for g in gross_types if g not in GROSS_TYPES]
-            if bad:
-                errors.append(f"неизвестные gross_types: {bad}")
-            if not gross_types:
-                errors.append("при флаге yes нужно указать gross_types")
+            if c.flag_types:
+                bad = [g for g in gross_types if g not in c.flag_type_ids]
+                if bad:
+                    errors.append(f"неизвестные gross_types: {bad}; допустимо: {c.flag_type_ids}")
+                if not gross_types:
+                    errors.append("при флаге yes нужно указать gross_types")
+            else:
+                gross_types = []
             if not any(e.speaker == "operator" for e in evidence):
                 errors.append("флаг нарушения требует цитаты из реплики оператора")
         else:

@@ -39,7 +39,7 @@ FRAME = """Ты — контролёр качества службы подде�
 выбирай между остальными вариантами. Для "na" обязательно заполни na_reason: какое именно условие выполнено.
 - Для критериев-шкал выбери одну ступень из перечисленных (значение как строку, например "15"), опираясь на \
 описания ступеней.
-- Для критериев-флагов: "yes" — нарушение есть, "no" — нарушения нет. При "yes" укажи gross_types.
+- Для критериев-флагов: "yes" — нарушение есть, "no" — нарушения нет. При "yes" укажи gross_types, если они перечислены.
 - Не додумывай то, чего нет в транскрипте. Оценивай только то, что видно в репликах.
 
 # Доказательства
@@ -94,10 +94,9 @@ def render_criterion(c: Criterion) -> str:
         lines.append("Ступени:")
         for s in c.scale:
             lines.append(f"- {_num(s.value)} — {s.label}")
-    if c.type == "flag":
-        lines.append('При "yes" укажи gross_types — подмножество: insult (оскорбление клиента), '
-                     "bypass_service (платная услуга в обход компании), confidential_disclosure "
-                     "(раскрытие конфиденциальной информации).")
+    if c.type == "flag" and c.flag_types:
+        kinds = "; ".join(f"{f.id} — {f.label}" if f.label else f.id for f in c.flag_types)
+        lines.append(f'При "yes" укажи gross_types — один или несколько типов нарушения: {kinds}.')
     if c.na_allowed:
         lines.append(f"N/A разрешён. Условие неприменимости: {c.na_condition or 'не задано — используй N/A только если критерий очевидно неприменим'}")
     else:
@@ -163,11 +162,8 @@ def criterion_schema(c: Criterion) -> dict:
         "answer": {"type": "string", "enum": answer_options(c)},
         "confidence": {"type": "number"},
     }
-    if c.type == "flag":
-        props["gross_types"] = {
-            "type": "array",
-            "items": {"type": "string", "enum": ["insult", "bypass_service", "confidential_disclosure"]},
-        }
+    if c.type == "flag" and c.flag_types:
+        props["gross_types"] = {"type": "array", "items": {"type": "string", "enum": c.flag_type_ids}}
     return {"type": "object", "properties": props, "required": list(props), "additionalProperties": False}
 
 

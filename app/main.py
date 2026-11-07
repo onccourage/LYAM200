@@ -15,6 +15,7 @@ from .config import settings
 from .dataset import DatasetError, LoadResult, load_dataset, load_upload
 from .appeals import AppealError, appeal_details, create_appeal, resolve_appeal
 from .batch import BatchManager
+from .checklists import diff as checklist_diff
 from .evaluator import evaluate_conversation
 from .llm import LLMError, get_provider
 from .models import Checklist, Conversation
@@ -151,6 +152,16 @@ def _parse_checklist(body: dict) -> Checklist:
     except ValidationError as e:
         errors = [f"{'.'.join(str(x) for x in err['loc']) or 'checklist'}: {err['msg']}" for err in e.errors()]
         raise HTTPException(status_code=422, detail={"errors": errors})
+
+
+@app.get("/api/checklists/{checklist_id}/diff")
+def api_checklist_diff(checklist_id: str, from_version: int, to_version: int | None = None) -> dict:
+    """Что изменилось между версиями: какие критерии потребуют вызова LLM, а какие только пересчёта."""
+    old = db.get_checklist(checklist_id, from_version)
+    new = db.get_checklist(checklist_id, to_version)
+    if old is None or new is None:
+        raise HTTPException(status_code=404, detail="Версия чек-листа не найдена")
+    return {"from_version": old.version, "to_version": new.version, "changes": checklist_diff(old, new)}
 
 
 @app.post("/api/checklists/validate")

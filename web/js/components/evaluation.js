@@ -5,14 +5,15 @@ import { fmtDate, fmtSec, h, toast } from "../dom.js";
 import { DECISION, GROSS, LOW_CONFIDENCE, answerLabel } from "../labels.js";
 import { pref, role, setPref } from "../state.js";
 
-export function createEvaluationPanel({ evaluation, checklist, latestVersion, conversation, transcript, onReevaluate, onChanged }) {
+export function createEvaluationPanel({ evaluation, checklist, active, conversation, transcript, onReevaluate, onChanged }) {
   const appeals = evaluation.appeals || [];
-  const ctx = { evaluation, appeals, onChanged, role: role() };
+  const flagLabels = Object.fromEntries(checklist.criteria.flatMap((c) => (c.flag_types || []).map((f) => [f.id, f.label || f.id])));
+  const ctx = { evaluation, appeals, onChanged, role: role(), flagLabels };
   const score = evaluation.score || {};
   const rows = new Map((score.criteria || []).map((c) => [c.criterion_id, c]));
   const verdicts = new Map((evaluation.answers || []).map((v) => [v.criterion_id, v]));
   const messages = new Map(conversation.messages.map((m) => [m.id, m]));
-  const outdated = latestVersion && latestVersion > evaluation.checklist_version;
+  const outdated = active && (active.id !== evaluation.checklist_id || active.version !== evaluation.checklist_version);
 
   // --- итог
   const total = evaluation.total;
@@ -24,19 +25,20 @@ export function createEvaluationPanel({ evaluation, checklist, latestVersion, co
       evaluation.original_total !== null && evaluation.original_total !== undefined && evaluation.original_total !== total
         ? h("div", { class: "orig-total", title: "Итог модели до решений по апелляциям" }, `модель: ${evaluation.original_total} → после апелляций: ${total ?? "—"}`) : null),
     h("div", { class: "summary-side" },
-      score.gross_error ? grossBadge(score, verdicts, transcript) : null,
+      score.gross_error ? grossBadge(score, verdicts, transcript, flagLabels) : null,
       pending.length ? h("div", { class: "alert alert-warn small" },
         `Требуют ручной проверки: ${pending.join(", ")}. Итог посчитан без них.`) : null,
       h("dl", { class: "meta" },
         metaRow("Чек-лист", `${checklist.name} · v${evaluation.checklist_version}`,
-          outdated ? h("span", { class: "chip chip-partial" }, `есть v${latestVersion}`) : null),
+          outdated ? h("span", { class: "chip chip-partial" },
+            active.id === evaluation.checklist_id ? `текущая v${active.version}` : `выбран «${active.name}» v${active.version}`) : null),
         metaRow("Модель", `${evaluation.model} · промпт ${evaluation.prompt_version}`),
         metaRow("Стоимость", `$${evaluation.cost} · вызовов LLM: ${evaluation.llm_calls} · токены ${evaluation.tokens_in}/${evaluation.tokens_out}`),
         metaRow("Оценено", fmtDate(evaluation.created_at))),
       h("div", { class: "actions" },
         h("button", { class: `btn ${outdated ? "btn-primary" : ""}`, type: "button", onclick: () => onReevaluate({ full: false }),
-          title: "Оценить последней версией чек-листа; неизменённые критерии берутся из кэша" },
-        "Переоценить текущей версией"),
+          title: "Оценить последней версией выбранного чек-листа; неизменённые критерии берутся из кэша" },
+        active ? `Переоценить: v${active.version}${active.id !== evaluation.checklist_id ? ` «${active.name}»` : ""}` : "Переоценить текущей версией"),
         h("button", { class: "btn btn-ghost", type: "button", onclick: () => onReevaluate({ full: true }),
           title: "Сбросить кэш критериев для диалога и оценить заново" }, "Переоценить полностью"))));
 
@@ -127,12 +129,13 @@ function metaRow(label, value, extra) {
   return [h("dt", {}, label), h("dd", {}, value, extra ? " " : "", extra)];
 }
 
-function grossBadge(score, verdicts, transcript) {
+function grossBadge(score, verdicts, transcript, flagLabels) {
   const ids = score.gross_criteria || [];
   const ev = ids.flatMap((id) => (verdicts.get(id)?.evidence || []));
   return h("div", { class: "gross-alert" },
     h("strong", {}, "Грубая ошибка"),
-    h("span", {}, (score.gross_types || []).map((g) => GROSS[g] || g).join(", ") || "тип не указан"),
+    h("span", {}, (score.gross_types || []).map((g) => flagLabels[g] || GROSS[g] || g).join(", ") ||
+      (score.gross_criteria || []).join(", ")),
     ev.length ? h("button", { class: "link", type: "button", onclick: () => transcript.focus(ev.map((e) => e.message_id), { play: true }) },
       "показать в диалоге") : null);
 }
@@ -199,7 +202,7 @@ function criterionCard(c, v, row, messages, transcript, ctx) {
     v?.status === "needs_review" ? h("div", { class: "alert alert-warn small" },
       v.review_reason || "Требует ручной проверки",
       (v.validation_errors || []).length ? h("ul", { class: "errors" }, v.validation_errors.map((e) => h("li", {}, e))) : null) : null,
-    c.type === "flag" && v?.gross_types?.length ? h("div", { class: "gross-types" }, v.gross_types.map((g) => GROSS[g] || g).join(", ")) : null,
+    c.type === "flag" && v?.gross_types?.length ? h("div", { class: "gross-types" }, v.gross_types.map((g) => ctx.flagLabels[g] || GROSS[g] || g).join(", ")) : null,
     appealBlock(c, v, ctx),
   ];
 

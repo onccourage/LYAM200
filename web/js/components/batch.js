@@ -1,6 +1,7 @@
 // Пакетная оценка: запуск (выбранные / весь набор), прогресс с опросом бэкенда, отмена, продолжение.
 import { api } from "../api.js";
 import { h, toast } from "../dom.js";
+import { activeChecklist, setPref } from "../state.js";
 
 const POLL_MS = 1000;
 const ACTIVE = new Set(["queued", "running"]);
@@ -12,10 +13,17 @@ export function createBatchPanel({ group, getSelected, onProgress, onFinished })
   const selBtn = h("button", { class: "btn", type: "button", disabled: true, onclick: () => start(getSelected()) }, "Оценить выбранные");
   const allBtn = h("button", { class: "btn btn-primary", type: "button", onclick: () => start(null) }, "Оценить весь набор");
   const progress = h("div", { class: "batch-progress", hidden: true });
+  const clSelect = h("select", { class: "input input-sm", "aria-label": "Чек-лист для оценки",
+    onchange: () => setPref("checklist", clSelect.value) });
+  api.listChecklists().then((list) => {
+    const cur = activeChecklist();
+    clSelect.replaceChildren(...list.map((c) => h("option", { value: c.checklist_id, selected: c.checklist_id === cur },
+      `${c.name} · v${c.latest_version}`)));
+  }).catch(() => {});
   let timer = null, lastProcessed = -1;
 
   const el = h("div", { class: "batch" },
-    h("div", { class: "batch-controls" }, selBtn, allBtn,
+    h("div", { class: "batch-controls" }, h("span", { class: "muted small" }, "Чек-лист:"), clSelect, selBtn, allBtn,
       h("label", { class: "check", for: "batch-full", title: "Сбросить кэш критериев и заново спросить модель по всем критериям" },
         fullBox, " полностью, без кэша")),
     progress);
@@ -24,7 +32,8 @@ export function createBatchPanel({ group, getSelected, onProgress, onFinished })
     const full = fullBox.checked;
     if (full && !confirm("Полная переоценка заново вызовет модель по всем критериям. Продолжить?")) return;
     try {
-      const job = await api.startBatch({ group_id: group, conversation_ids: ids && ids.length ? ids : null, full });
+      const job = await api.startBatch({ group_id: group, conversation_ids: ids && ids.length ? ids : null, full,
+        checklist_id: clSelect.value || activeChecklist() });
       toast(`Пакетная оценка #${job.id}: ${job.total} диалогов`, "ok");
       show(job);
       poll(job.id);

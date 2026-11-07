@@ -14,7 +14,7 @@ from pathlib import Path
 
 from . import db
 from .models import Checklist
-from .scoring import GROSS_TYPES, ScoringError, normalize_answer, score
+from .scoring import ScoringError, normalize_answer, score
 
 
 class AppealError(ValueError):
@@ -103,11 +103,11 @@ def resolve_appeal(appeal_id: int, decision: str, reason: str, reviewer_label: s
             raise AppealError(str(e)) from e
         final_answer = _fmt_answer(kind, value)
         gross = []
-        if crit.type == "flag" and final_answer == "yes":
+        if crit.type == "flag" and final_answer == "yes" and crit.flag_types:
             gross = list(dict.fromkeys(new_gross_types or verdict.get("gross_types") or []))
-            bad = [g for g in gross if g not in GROSS_TYPES]
+            bad = [g for g in gross if g not in crit.flag_type_ids]
             if bad or not gross:
-                raise AppealError(f"Для флага «Да» укажите тип нарушения: {', '.join(GROSS_TYPES)}")
+                raise AppealError(f"Для флага «Да» укажите тип нарушения: {', '.join(crit.flag_type_ids)}")
         if final_answer == original and gross == (verdict.get("gross_types") or []):
             raise AppealError("Новое значение совпадает с текущим — выберите «Подтвердить»")
 

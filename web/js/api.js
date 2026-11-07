@@ -76,5 +76,9 @@ export const api = {
   getAppeal: (id) => request("GET", `/appeals/${id}`),
   resolveAppeal: (id, payload) => request("POST", `/appeals/${id}/resolve`, { body: payload }),
   listChecklists: () => request("GET", "/checklists"),
+  checklistVersions: (id) => request("GET", `/checklists/${enc(id)}/versions`),
+  checklistDiff: (id, fromVersion, toVersion) => request("GET", `/checklists/${enc(id)}/diff`, { query: { from_version: fromVersion, to_version: toVersion } }),
+  validateChecklist: (checklist) => request("POST", "/checklists/validate", { body: checklist }),
+  saveChecklist: (checklist) => request("POST", "/checklists", { body: checklist }),
   getChecklist: (id, version) => request("GET", `/checklists/${enc(id)}`, { query: { version } }),
 };

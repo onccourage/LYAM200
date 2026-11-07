@@ -3,6 +3,7 @@ import { api } from "./api.js";
 import { h } from "./dom.js";
 import { ROLES, pref, role, runtime, setPref } from "./state.js";
 import { renderAppeal, renderAppealsList } from "./components/appeals.js";
+import { renderChecklistEditor } from "./components/checklist.js";
 import { renderConversation } from "./components/conversation.js";
 import { renderDatasets } from "./components/datasets.js";
 
@@ -14,6 +15,7 @@ function parseRoute() {
   if (parts[0] === "d" && parts[1]) return { name: "datasets", group: parts[1] };
   if (parts[0] === "appeals") return { name: "appeals", status: parts[1] || "open" };
   if (parts[0] === "a" && parts[1]) return { name: "appeal", id: Number(parts[1]) };
+  if (parts[0] === "checklist") return { name: "checklist", id: parts[1], version: parts[2] ? Number(parts[2]) : undefined };
   return { name: "datasets" };
 }
 
@@ -21,7 +23,7 @@ let lastKey = "";
 function route(force = false) {
   const r = parseRoute();
   // смена якоря реплики внутри той же карточки не перерисовывает экран
-  const key = r.name === "conversation" ? `c|${r.group}|${r.conv}` : `${r.name}|${r.group || r.id || r.status || ""}`;
+  const key = r.name === "conversation" ? `c|${r.group}|${r.conv}` : `${r.name}|${r.group || r.id || r.status || ""}|${r.version || ""}`;
   if (!force && key === lastKey && r.name === "conversation") return;
   lastKey = key;
   renderNav(r);
@@ -29,6 +31,7 @@ function route(force = false) {
   if (r.name === "conversation") renderConversation(view, r);
   else if (r.name === "appeals") renderAppealsList(view, r);
   else if (r.name === "appeal") renderAppeal(view, r);
+  else if (r.name === "checklist") renderChecklistEditor(view, r);
   else renderDatasets(view, r);
 }
 
@@ -39,7 +42,8 @@ function renderNav(r) {
     "Апелляции", h("span", { class: "nav-count", id: "appeals-count", hidden: true }));
   nav.replaceChildren(
     h("a", { href: `#/d/${encodeURIComponent(group)}`, class: r.name === "datasets" || r.name === "conversation" ? "active" : "" }, "Наборы и диалоги"),
-    appealsLink);
+    appealsLink,
+    h("a", { href: "#/checklist", class: r.name === "checklist" ? "active" : "" }, "Чек-лист"));
   refreshAppealsCount();
 }
 

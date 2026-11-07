@@ -34,6 +34,13 @@ class ScaleStep(BaseModel):
     label: str = ""
 
 
+class FlagType(BaseModel):
+    """Подтип нарушения для flag-критерия (например, insult). Задаётся в чек-листе, не в коде."""
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(min_length=1, pattern=r"^[A-Za-z0-9_\-]+$")
+    label: str = ""
+
+
 class Section(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: str = Field(min_length=1)
@@ -54,6 +61,7 @@ class Criterion(BaseModel):
     na_allowed: bool = False
     na_condition: str = ""
     scale: list[ScaleStep] = Field(default_factory=list)
+    flag_types: list[FlagType] = Field(default_factory=list)   # только для type=flag; пусто — без подтипов
     guidance: str = ""
     channels: list[str] = Field(default_factory=lambda: list(KNOWN_CHANNELS))
     requires_audio: bool = False
@@ -87,7 +95,17 @@ class Criterion(BaseModel):
             self.scale = sorted(self.scale, key=lambda s: s.value, reverse=True)
         elif self.scale:
             raise ValueError(f"{self.id}: шкала задаётся только для type=scale")
+        if self.flag_types:
+            if self.type != "flag":
+                raise ValueError(f"{self.id}: типы нарушений задаются только для type=flag")
+            ids = [f.id for f in self.flag_types]
+            if len(set(ids)) != len(ids):
+                raise ValueError(f"{self.id}: ID типов нарушений должны быть уникальны")
         return self
+
+    @property
+    def flag_type_ids(self) -> list[str]:
+        return [f.id for f in self.flag_types]
 
     @property
     def scale_values(self) -> list[Decimal]:

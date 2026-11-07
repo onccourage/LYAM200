@@ -25,3 +25,8 @@ export function role() {
   const r = pref("role", "controller");
   return ROLES[r] ? r : "controller";
 }
+
+// Чек-лист, которым оцениваем (последняя версия). Выбирается в редакторе / на экране набора.
+export function activeChecklist() {
+  return pref("checklist", "default_chat");
+}
