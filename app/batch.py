@@ -57,7 +57,10 @@ async def run_job(job_id: int, provider: LLMProvider, *, db_path: Path | None = 
     db.update_batch_job(job_id, path=db_path, status="running", finished_at=None, errors=[], current=[], cost="0", **state)
 
     def flush():
-        db.update_batch_job(job_id, path=db_path, cost=str(cost), errors=errors[-50:], current=list(current), **state)
+        # status=running при каждом сохранении: если сервер при старте пометил задание прерванным, а оно
+        # выполняется в другом процессе (CLI), статус восстанавливается
+        db.update_batch_job(job_id, path=db_path, status="running", cost=str(cost), errors=errors[-50:],
+                            current=list(current), **state)
 
     async def one(cid: str):
         nonlocal cost

@@ -6,13 +6,14 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ValidationError
 
 from . import db
 from .config import settings
 from .dataset import DatasetError, LoadResult, load_dataset, load_upload
+from .audio import AudioError, resolve_audio_url
 from .appeals import AppealError, appeal_details, create_appeal, resolve_appeal
 from .batch import BatchManager
 from .checklists import diff as checklist_diff
@@ -111,6 +112,19 @@ def api_get_conversation(group_id: str, conversation_id: str) -> dict:
     if c is None:
         raise HTTPException(status_code=404, detail="Диалог не найден")
     return c.model_dump(exclude={"raw"})
+
+
+@app.get("/api/audio/{group_id}/{conversation_id}")
+async def api_audio(group_id: str, conversation_id: str):
+    """Перенаправить на актуальную ссылку на запись звонка (audio_url организаторов — HTML-страница)."""
+    c = db.get_conversation(group_id, conversation_id)
+    if c is None or not c.audio_url:
+        raise HTTPException(status_code=404, detail="У диалога нет записи")
+    try:
+        url = await run_in_threadpool(resolve_audio_url, c.audio_url)
+    except AudioError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return RedirectResponse(url, status_code=302)
 
 
 @app.post("/api/conversations/upload")

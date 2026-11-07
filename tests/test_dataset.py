@@ -92,3 +92,10 @@ def test_manual_upload_variants(tmp_db, mock_payload):
     assert len(db.list_conversations("MANUAL", path=tmp_db)) == 4
     with pytest.raises(DatasetError):
         load_upload("nope", db_path=tmp_db)
+
+
+def test_build_url_replaces_group_id():
+    from app.dataset import build_url
+    u = build_url("https://x.test/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sig=abc&group_id=DEV", "CTRL-7")
+    assert u == "https://x.test/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sig=abc&group_id=CTRL-7"
+    assert build_url("https://x.test/data", "DEV") == "https://x.test/data?group_id=DEV"

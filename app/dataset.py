@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from . import db
 from .config import settings
@@ -181,6 +182,14 @@ def read_cache(group_id: str, cache_dir: Path | None = None) -> dict | None:
 
 # ---------------------------------------------------------------- загрузка
 
+def build_url(base: str, group_id: str) -> str:
+    """Подставить group_id в URL. Если в базовом URL уже есть group_id (как в выданной ссылке) — заменить."""
+    parts = urlsplit(base.strip())
+    query = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k != "group_id"]
+    query.append(("group_id", group_id))
+    return urlunsplit(parts._replace(query=urlencode(query)))
+
+
 def fetch_payload(group_id: str, *, url: str | None = None, client: httpx.Client | None = None) -> dict:
     """GET {DATASET_API_URL}?group_id=... — только с бэкенда."""
     url = url if url is not None else settings.dataset_api_url
@@ -189,7 +198,7 @@ def fetch_payload(group_id: str, *, url: str | None = None, client: httpx.Client
     own = client is None
     client = client or httpx.Client(timeout=settings.dataset_timeout_sec, follow_redirects=True)
     try:
-        resp = client.get(url, params={"group_id": group_id})
+        resp = client.get(build_url(url, group_id))
         resp.raise_for_status()
         return resp.json()
     except httpx.HTTPStatusError as e:
