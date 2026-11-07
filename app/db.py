@@ -156,7 +156,9 @@ MIGRATIONS = [
     ("appeals", "group_id", "TEXT"), ("appeals", "conversation_id", "TEXT"), ("appeals", "submitter_label", "TEXT"),
     ("appeals", "original_total", "TEXT"), ("appeals", "new_gross_types", "TEXT"), ("appeals", "new_points", "TEXT"),
     ("appeals", "final_total", "TEXT"),
-    ("evaluations", "origin", "TEXT NOT NULL DEFAULT 'live'"),   # live — оценено здесь; seed — загружено из сида
+    ("evaluations", "origin", "TEXT NOT NULL DEFAULT 'live'"),
+    ("batch_jobs", "samples", "INTEGER NOT NULL DEFAULT 1"),
+    ("evaluations", "samples", "INTEGER NOT NULL DEFAULT 1"),   # live — оценено здесь; seed — загружено из сида
 ]
 
 
@@ -366,7 +368,7 @@ def save_evaluation(rec: dict, path: Path | None = None) -> int:
         cur = conn.execute(
             "INSERT INTO evaluations(group_id, conversation_id, checklist_id, checklist_version, model, prompt_version, "
             "status, total, gross_error, answers_json, score_json, tokens_in, tokens_out, llm_calls, cost, "
-            "raw_responses_json, is_current, created_at, origin) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?)",
+            "raw_responses_json, is_current, created_at, origin, samples) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?)",
             (
                 rec["group_id"], rec["conversation_id"], rec["checklist_id"], rec["checklist_version"],
                 rec.get("model"), rec.get("prompt_version"), rec["status"],
@@ -375,6 +377,7 @@ def save_evaluation(rec: dict, path: Path | None = None) -> int:
                 json.dumps(rec.get("score"), ensure_ascii=False),
                 rec.get("tokens_in", 0), rec.get("tokens_out", 0), rec.get("llm_calls", 0), str(rec.get("cost", "0")),
                 json.dumps(rec.get("raw_responses", []), ensure_ascii=False), now_iso(), rec.get("origin", "live"),
+                int(rec.get("samples") or 1),
             ),
         )
         return cur.lastrowid
@@ -410,7 +413,7 @@ def list_current_evaluations(group_id: str, path: Path | None = None) -> list[di
     with connect(path) as conn:
         rows = conn.execute(
             "SELECT id, group_id, conversation_id, checklist_id, checklist_version, model, prompt_version, status, "
-            "total, original_total, gross_error, tokens_in, tokens_out, llm_calls, cost, created_at, origin, score_json, "
+            "total, original_total, gross_error, tokens_in, tokens_out, llm_calls, cost, created_at, origin, samples, score_json, "
             "(SELECT COUNT(*) FROM appeals a WHERE a.evaluation_id=e.id AND a.status='open') AS open_appeals, "
             "(SELECT COUNT(*) FROM appeals a WHERE a.evaluation_id=e.id) AS appeals_count "
             "FROM evaluations e WHERE group_id=? AND is_current=1", (group_id,),
@@ -429,14 +432,14 @@ def list_current_evaluations(group_id: str, path: Path | None = None) -> list[di
 # ---------------------------------------------------------------- пакетные задания
 
 def create_batch_job(group_id: str, checklist_id: str, checklist_version: int, conversation_ids: list[str],
-                     full: bool, skip_evaluated: bool, path: Path | None = None) -> int:
+                     full: bool, skip_evaluated: bool, path: Path | None = None, samples: int = 1) -> int:
     ts = now_iso()
     with connect(path) as conn:
         cur = conn.execute(
             "INSERT INTO batch_jobs(group_id, checklist_id, checklist_version, conversation_ids, full, skip_evaluated, "
-            "status, total, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            "status, total, created_at, updated_at, samples) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (group_id, checklist_id, checklist_version, json.dumps(conversation_ids), int(full), int(skip_evaluated),
-             "queued", len(conversation_ids), ts, ts),
+             "queued", len(conversation_ids), ts, ts, int(samples)),
         )
         return cur.lastrowid
 

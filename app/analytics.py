@@ -52,7 +52,7 @@ def compute(group_id: str, checklist_id: str | None = None, db_path: Path | None
 
     # --- по критериям
     stats: dict[str, dict] = defaultdict(lambda: {"yes": 0, "no": 0, "na": 0, "pending": 0, "steps": Counter(),
-                                                  "pct_points": [], "low_conf": 0})
+                                                  "pct_points": [], "low_conf": 0, "split": 0, "consensus": 0})
     for e in evals:
         rows_by_id = {r["criterion_id"]: r for r in (e["score"] or {}).get("criteria", [])}
         for v in e["answers"]:
@@ -67,6 +67,9 @@ def compute(group_id: str, checklist_id: str | None = None, db_path: Path | None
                 s["steps"][a] += 1
             if v.get("confidence") is not None and v["confidence"] < 0.7:
                 s["low_conf"] += 1
+            if v.get("votes"):
+                s["consensus"] += 1
+                s["split"] += (v.get("agreement") or 1) < 1
             row = rows_by_id.get(v["criterion_id"])
             if row and row.get("status") == "scored" and row.get("max_points") not in (None, "0"):
                 s["pct_points"].append(Decimal(row["points"]) / Decimal(row["max_points"]) * 100)
@@ -91,6 +94,7 @@ def compute(group_id: str, checklist_id: str | None = None, db_path: Path | None
             "problem_label": label, "problem": problem, "applicable": base, "problem_rate": _pct(problem, base),
             "na": s["na"], "na_rate": _pct(s["na"], evaluated), "needs_review": s["pending"],
             "low_confidence": s["low_conf"], "avg_points_pct": _avg(s["pct_points"], "0.1"),
+            "consensus_answers": s["consensus"], "split": s["split"], "split_rate": _pct(s["split"], s["consensus"]),
             "steps": {k: s["steps"][k] for k in sorted(s["steps"], key=lambda x: -Decimal(x))},
             "yes": s["yes"], "no": s["no"],
         })

@@ -30,3 +30,9 @@ export function role() {
 export function activeChecklist() {
   return pref("checklist", "default_chat");
 }
+
+// Число проходов модели на диалог (консенсус). 1 — обычная оценка.
+export function samplesPref() {
+  const n = Number(pref("samples", "1"));
+  return Number.isInteger(n) && n >= 1 && n <= 7 ? n : 1;
+}

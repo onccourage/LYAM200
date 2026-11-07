@@ -200,7 +200,7 @@ def api_save_checklist(body: dict) -> dict:
 
 @app.post("/api/evaluations/{group_id}/{conversation_id}")
 async def api_evaluate(group_id: str, conversation_id: str, checklist_id: str = "default_chat",
-                       checklist_version: int | None = None, full: bool = False) -> dict:
+                       checklist_version: int | None = None, full: bool = False, samples: int | None = None) -> dict:
     """Оценить один диалог. full=true — сбросить кэш критериев для этого диалога."""
     conv = db.get_conversation(group_id, conversation_id)
     if conv is None:
@@ -213,7 +213,7 @@ async def api_evaluate(group_id: str, conversation_id: str, checklist_id: str = 
         provider = get_provider()
     except LLMError as e:
         raise HTTPException(status_code=503, detail=str(e))
-    out = await evaluate_conversation(conv, cl, provider, use_cache=not full)
+    out = await evaluate_conversation(conv, cl, provider, use_cache=not full, samples=samples)
     if out.record["status"] == "error":
         raise HTTPException(status_code=502, detail=f"Модель недоступна: {out.record['llm_error']}")
     rec = dict(out.record)
@@ -274,6 +274,7 @@ class BatchRequest(BaseModel):
     checklist_version: int | None = None        # None — последняя версия
     full: bool = False                          # сбросить кэш критериев
     skip_evaluated: bool = True                 # пропустить уже оценённые этой версией
+    samples: int = 1                            # >1 — консенсус нескольких проходов модели
 
 
 def _require_llm() -> None:
@@ -297,7 +298,9 @@ async def api_start_batch(req: BatchRequest) -> dict:
     active = batches.active_for(req.group_id)
     if active:
         raise HTTPException(status_code=409, detail=f"Для набора уже идёт пакетная оценка #{active}")
-    job_id = batches.submit(req.group_id, cl, ids, full=req.full, skip_evaluated=req.skip_evaluated)
+    if not 1 <= req.samples <= 7:
+        raise HTTPException(status_code=400, detail="samples: от 1 до 7")
+    job_id = batches.submit(req.group_id, cl, ids, full=req.full, skip_evaluated=req.skip_evaluated, samples=req.samples)
     return db.get_batch_job(job_id)
 
 

@@ -117,13 +117,14 @@ export async function renderAnalytics(root, { group } = {}) {
     display: c.problem_rate === null ? "—" : `${c.problem_rate}% (${c.problem} из ${c.applicable})`,
     tip: [`${c.code} ${c.title}`, `${c.problem_label}: ${c.problem} из ${c.applicable} применимых`,
       `N/A: ${c.na}${c.na_rate !== null ? ` (${c.na_rate}%)` : ""}`, `требуют проверки: ${c.needs_review}`,
-      c.avg_points_pct !== null ? `средний балл: ${c.avg_points_pct}% от веса` : "без баллов (флаг)"],
+      c.avg_points_pct !== null ? `средний балл: ${c.avg_points_pct}% от веса` : "без баллов (флаг)",
+      c.consensus_answers ? `проходы модели разошлись: ${c.split} из ${c.consensus_answers}` : ""].filter(Boolean),
   })));
   const critTable = table(
-    [["Критерий"], ["Тип"], ["Да", 1], ["Нет", 1], ["Ступени"], ["N/A", 1], ["Проверка", 1], ["Низкая увер.", 1], ["Ср. балл, % веса", 1], ["Проблемных, %", 1]],
+    [["Критерий"], ["Тип"], ["Да", 1], ["Нет", 1], ["Ступени"], ["N/A", 1], ["Проверка", 1], ["Низкая увер.", 1], ["Расхождения проходов", 1], ["Ср. балл, % веса", 1], ["Проблемных, %", 1]],
     d.criteria.map((c) => [`${c.code} ${c.title}`, TYPE[c.type], c.type === "scale" ? "" : c.yes, c.type === "scale" ? "" : c.no,
       Object.entries(c.steps).map(([k, n]) => `${k}: ${n}`).join(", "), c.na, c.needs_review, c.low_confidence,
-      c.avg_points_pct, c.problem_rate]));
+      c.consensus_answers ? `${c.split} из ${c.consensus_answers}` : "—", c.avg_points_pct, c.problem_rate]));
 
   // --- распределение итогов: колонки
   const maxCount = Math.max(1, ...d.histogram.map((b) => b.count));

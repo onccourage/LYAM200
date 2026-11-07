@@ -36,6 +36,8 @@ class Settings:
     llm_max_tokens: int = field(default_factory=lambda: int(_env("LLM_MAX_TOKENS", "16000")))
     llm_server_fallback: str = field(default_factory=lambda: _env("LLM_SERVER_FALLBACK", "auto"))  # auto|on|off
     llm_timeout_sec: float = field(default_factory=lambda: float(_env("LLM_TIMEOUT_SEC", "300")))
+    llm_samples: int = field(default_factory=lambda: int(_env("LLM_SAMPLES", "1")))  # >1 — консенсус N проходов
+    llm_sample_temperature: float = field(default_factory=lambda: float(_env("LLM_SAMPLE_TEMPERATURE", "0.7")))
     llm_max_retries: int = field(default_factory=lambda: int(_env("LLM_MAX_RETRIES", "4")))
 
     dataset_api_url: str = field(default_factory=lambda: _env("DATASET_API_URL"))

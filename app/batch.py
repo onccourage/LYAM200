@@ -25,11 +25,12 @@ log = logging.getLogger("cqa.batch")
 
 
 def is_up_to_date(group_id: str, conversation_id: str, checklist: Checklist, path: Path | None = None,
-                  not_before: str | None = None) -> bool:
+                  not_before: str | None = None, samples: int = 1) -> bool:
     """Текущая оценка той же версии чек-листа, статус done (и, для полной переоценки, сделана не раньше not_before)."""
     ev = db.get_current_evaluation(group_id, conversation_id, path=path)
     return bool(ev and ev["checklist_id"] == checklist.id and ev["checklist_version"] == checklist.version
-                and ev["status"] == "done" and (not_before is None or ev["created_at"] > not_before))
+                and ev["status"] == "done" and (not_before is None or ev["created_at"] > not_before)
+                and (ev.get("samples") or 1) >= samples)   # консенсус поверх одиночной оценки — не пропускать
 
 
 async def run_job(job_id: int, provider: LLMProvider, *, db_path: Path | None = None,
@@ -73,7 +74,8 @@ async def run_job(job_id: int, provider: LLMProvider, *, db_path: Path | None = 
                 state["failed"] += 1
                 errors.append({"conversation_id": cid, "error": "диалог не найден"})
             elif job["skip_evaluated"] and is_up_to_date(job["group_id"], cid, checklist, db_path,
-                                                         not_before=job["created_at"] if job["full"] else None):
+                                                         not_before=job["created_at"] if job["full"] else None,
+                                                         samples=job.get("samples") or 1):
                 state["skipped"] += 1
             else:
                 current.append(cid)
@@ -81,7 +83,8 @@ async def run_job(job_id: int, provider: LLMProvider, *, db_path: Path | None = 
                 attempt = 0
                 while True:
                     try:
-                        out = await evaluate_conversation(conv, checklist, provider, use_cache=not job["full"], db_path=db_path)
+                        out = await evaluate_conversation(conv, checklist, provider, use_cache=not job["full"], db_path=db_path,
+                                                          samples=job.get("samples") or 1)
                         rec = out.record
                     except Exception as e:  # баг или неожиданная ошибка — не роняем весь пакет
                         log.exception("batch %s: %s", job_id, cid)
@@ -145,9 +148,9 @@ class BatchManager:
         self.tasks[job_id] = asyncio.create_task(run_job(job_id, provider, db_path=self.db_path, cancel_event=cancel))
 
     def submit(self, group_id: str, checklist: Checklist, conversation_ids: list[str], *, full: bool = False,
-               skip_evaluated: bool = True) -> int:
+               skip_evaluated: bool = True, samples: int = 1) -> int:
         job_id = db.create_batch_job(group_id, checklist.id, checklist.version, conversation_ids, full, skip_evaluated,
-                                     path=self.db_path)
+                                     path=self.db_path, samples=samples)
         self.start(job_id)
         return job_id
 

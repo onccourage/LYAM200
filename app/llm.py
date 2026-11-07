@@ -87,7 +87,7 @@ class LLMResponse:
 class LLMProvider(Protocol):
     model: str
 
-    async def complete_json(self, system: str, user: str, schema: dict) -> LLMResponse: ...
+    async def complete_json(self, system: str, user: str, schema: dict, *, sample: int = 0) -> LLMResponse: ...
 
 
 def _parse_json(text: str) -> dict:
@@ -120,7 +120,8 @@ class AnthropicProvider:
         mode = settings.llm_server_fallback.lower()
         return mode == "on" or (mode == "auto" and self.model in SERVER_FALLBACK_MODELS)
 
-    async def complete_json(self, system: str, user: str, schema: dict) -> LLMResponse:
+    async def complete_json(self, system: str, user: str, schema: dict, *, sample: int = 0) -> LLMResponse:
+        # sample не меняет запрос: temperature на текущих моделях Claude не поддерживается, разброс даёт рассуждение
         a = self._anthropic
         output_config: dict = {"format": {"type": "json_schema", "schema": schema}}
         if settings.llm_effort:
@@ -185,11 +186,12 @@ class OpenAICompatibleProvider:
         self.client = httpx.AsyncClient(timeout=settings.llm_timeout_sec, headers=headers)
         self._httpx = httpx
 
-    async def complete_json(self, system: str, user: str, schema: dict) -> LLMResponse:
+    async def complete_json(self, system: str, user: str, schema: dict, *, sample: int = 0) -> LLMResponse:
         body = {
             "model": self.model,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
-            "temperature": 0,
+            # первый проход детерминирован; дополнительные проходы консенсуса — с разбросом
+            "temperature": 0 if sample == 0 else settings.llm_sample_temperature,
             "max_tokens": settings.llm_max_tokens,
             "response_format": {"type": "json_schema", "json_schema": {"name": "evaluation", "schema": schema, "strict": True}},
         }
@@ -239,9 +241,12 @@ class FakeProvider:
         self.model = model
         self.requests: list[dict] = []
 
-    async def complete_json(self, system: str, user: str, schema: dict) -> LLMResponse:
-        self.requests.append({"system": system, "user": user, "schema": schema})
-        data = self.responder(system, user, schema)
+    async def complete_json(self, system: str, user: str, schema: dict, *, sample: int = 0) -> LLMResponse:
+        self.requests.append({"system": system, "user": user, "schema": schema, "sample": sample})
+        try:
+            data = self.responder(system, user, schema, sample)
+        except TypeError:
+            data = self.responder(system, user, schema)
         text = json.dumps(data, ensure_ascii=False)
         usage = LLMUsage(input_tokens=len(system + user) // 4, output_tokens=len(text) // 4, calls=1)
         return LLMResponse(data=data, text=text, model=self.model, usage=usage, stop_reason="end_turn")

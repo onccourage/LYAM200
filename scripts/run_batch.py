@@ -23,6 +23,7 @@ async def main():
     ap.add_argument("--version", type=int)
     ap.add_argument("--full", action="store_true", help="сбросить кэш критериев")
     ap.add_argument("--concurrency", type=int)
+    ap.add_argument("--samples", type=int, default=1, help="консенсус: число проходов модели на диалог")
     a = ap.parse_args()
 
     db.init_db()
@@ -33,7 +34,7 @@ async def main():
     ids = a.ids or [c.conversation_id for c in db.list_conversations(a.group_id)]
     if not ids:
         sys.exit(f"набор {a.group_id} не загружен: make fetch GROUP={a.group_id}")
-    job_id = db.create_batch_job(a.group_id, cl.id, cl.version, ids, a.full, True)
+    job_id = db.create_batch_job(a.group_id, cl.id, cl.version, ids, a.full, True, samples=a.samples)
     print(f"Задание #{job_id}: {len(ids)} диалогов, {cl.id} v{cl.version}, параллельно {a.concurrency or settings.batch_concurrency}")
 
     task = asyncio.create_task(run_job(job_id, get_provider(), concurrency=a.concurrency))

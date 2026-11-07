@@ -1,7 +1,7 @@
 // Пакетная оценка: запуск (выбранные / весь набор), прогресс с опросом бэкенда, отмена, продолжение.
 import { api } from "../api.js";
 import { h, toast } from "../dom.js";
-import { activeChecklist, setPref } from "../state.js";
+import { activeChecklist, samplesPref, setPref } from "../state.js";
 
 const POLL_MS = 1000;
 const ACTIVE = new Set(["queued", "running"]);
@@ -15,6 +15,11 @@ export function createBatchPanel({ group, getSelected, onProgress, onFinished })
   const progress = h("div", { class: "batch-progress", hidden: true });
   const clSelect = h("select", { class: "input input-sm", "aria-label": "Чек-лист для оценки",
     onchange: () => setPref("checklist", clSelect.value) });
+  const samplesSel = h("select", { class: "input input-sm", "aria-label": "Проходов модели",
+    title: "Консенсус: каждый диалог оценивается N раз, по каждому критерию берётся ответ большинства; расхождения подсвечиваются",
+    onchange: () => setPref("samples", samplesSel.value) },
+  [[1, "1 проход"], [3, "3 прохода (консенсус)"], [5, "5 проходов (консенсус)"]].map(([v, t]) =>
+    h("option", { value: v, selected: samplesPref() === v }, t)));
   api.listChecklists().then((list) => {
     const cur = activeChecklist();
     clSelect.replaceChildren(...list.map((c) => h("option", { value: c.checklist_id, selected: c.checklist_id === cur },
@@ -23,7 +28,7 @@ export function createBatchPanel({ group, getSelected, onProgress, onFinished })
   let timer = null, lastProcessed = -1;
 
   const el = h("div", { class: "batch" },
-    h("div", { class: "batch-controls" }, h("span", { class: "muted small" }, "Чек-лист:"), clSelect, selBtn, allBtn,
+    h("div", { class: "batch-controls" }, h("span", { class: "muted small" }, "Чек-лист:"), clSelect, samplesSel, selBtn, allBtn,
       h("label", { class: "check", for: "batch-full", title: "Сбросить кэш критериев и заново спросить модель по всем критериям" },
         fullBox, " полностью, без кэша")),
     progress);
@@ -33,7 +38,7 @@ export function createBatchPanel({ group, getSelected, onProgress, onFinished })
     if (full && !confirm("Полная переоценка заново вызовет модель по всем критериям. Продолжить?")) return;
     try {
       const job = await api.startBatch({ group_id: group, conversation_ids: ids && ids.length ? ids : null, full,
-        checklist_id: clSelect.value || activeChecklist() });
+        checklist_id: clSelect.value || activeChecklist(), samples: Number(samplesSel.value) || 1 });
       toast(`Пакетная оценка #${job.id}: ${job.total} диалогов`, "ok");
       show(job);
       poll(job.id);
@@ -53,7 +58,7 @@ export function createBatchPanel({ group, getSelected, onProgress, onFinished })
       h("div", { class: "batch-line" },
         h("strong", {}, `Задание #${job.id}`),
         h("span", { class: `chip ${active ? "chip-partial" : job.status === "done" && !job.failed ? "chip-done" : "chip-bad"}` }, STATUS[job.status] || job.status),
-        h("span", { class: "muted small" }, `${job.checklist_id} v${job.checklist_version}${job.full ? " · полностью" : ""}`)),
+        h("span", { class: "muted small" }, `${job.checklist_id} v${job.checklist_version}${job.full ? " · полностью" : ""}${job.samples > 1 ? ` · консенсус ×${job.samples}` : ""}`)),
       h("div", { class: "bar bar-lg", role: "progressbar", "aria-valuemin": "0", "aria-valuemax": String(job.total), "aria-valuenow": String(job.processed) },
         h("div", { class: "bar-fill", style: `width:${pct}%` })),
       h("div", { class: "batch-line small" },

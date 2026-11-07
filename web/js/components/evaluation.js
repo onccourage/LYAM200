@@ -32,7 +32,7 @@ export function createEvaluationPanel({ evaluation, checklist, active, conversat
         metaRow("Чек-лист", `${checklist.name} · v${evaluation.checklist_version}`,
           outdated ? h("span", { class: "chip chip-partial" },
             active.id === evaluation.checklist_id ? `текущая v${active.version}` : `выбран «${active.name}» v${active.version}`) : null),
-        metaRow("Модель", `${evaluation.model} · промпт ${evaluation.prompt_version}`),
+        metaRow("Модель", `${evaluation.model} · промпт ${evaluation.prompt_version}${evaluation.samples > 1 ? ` · консенсус ×${evaluation.samples}` : ""}`),
         metaRow("Стоимость", `$${evaluation.cost} · вызовов LLM: ${evaluation.llm_calls} · токены ${evaluation.tokens_in}/${evaluation.tokens_out}`),
         metaRow("Оценено", fmtDate(evaluation.created_at),
           evaluation.origin === "seed" ? h("span", { class: "chip chip-partial", title: "Оценка не делалась на этой машине — загружена из data/seed (предрасчитано)" }, "из сида") : null)),
@@ -205,9 +205,10 @@ function pointsLine(c, row) {
 
 function criterionCard(c, v, row, messages, transcript, ctx) {
   const low = v && v.status === "ok" && v.confidence !== null && v.confidence !== undefined && v.confidence < LOW_CONFIDENCE;
+  const split = v && v.votes && v.agreement !== null && v.agreement < 1;
   const classes = ["crit"];
   if (!v || v.status === "needs_review") classes.push("crit-review");
-  if (low) classes.push("crit-low");
+  if (low || split) classes.push("crit-low");
   if (c.type === "flag" && v?.answer === "yes") classes.push("crit-gross");
 
   const stepLabel = c.type === "scale" && v?.answer && v.answer !== "na"
@@ -247,8 +248,10 @@ function criterionCard(c, v, row, messages, transcript, ctx) {
       answerChip(c, v, row)),
     pointsLine(c, row),
     body,
+    split ? h("div", { class: "votes" }, `Проходы модели разошлись: ${Object.entries(v.votes).map(([a, n]) => `${answerLabel(a, c.type)} ×${n}`).join(", ")} — взят ответ большинства. Стоит проверить.`) : null,
     h("footer", { class: "crit-foot muted small" },
       v?.source === "cache" ? "из кэша" : v?.source === "rule" ? "правило без LLM" : v?.source === "appeal" ? "решение проверяющего" : "",
       v?.confidence !== null && v?.confidence !== undefined
-        ? h("span", { class: low ? "low-conf" : "" }, ` уверенность ${Math.round(v.confidence * 100)}%${low ? " — низкая" : ""}`) : null));
+        ? h("span", { class: low ? "low-conf" : "" }, ` уверенность ${Math.round(v.confidence * 100)}%${low ? " — низкая" : ""}`) : null,
+      v?.samples > 1 && !split ? ` · консенсус ${v.samples}/${v.samples}` : null));
 }

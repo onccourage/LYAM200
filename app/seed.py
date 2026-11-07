@@ -32,7 +32,7 @@ def export_seed(group_id: str, out: Path | None = None, *, db_path: Path | None 
         cache = [dict(r) for r in conn.execute("SELECT cache_key, criterion_id, answer_json FROM criterion_cache")]
     keep = ("conversation_id", "checklist_id", "checklist_version", "model", "prompt_version", "status", "total",
             "original_total", "gross_error", "answers", "score", "tokens_in", "tokens_out", "llm_calls", "cost", "created_at",
-            "raw_responses")
+            "raw_responses", "samples")
     doc = {
         "format": FORMAT,
         "group_id": group_id,

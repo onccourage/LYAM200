@@ -286,6 +286,8 @@ h1, h2, h3 { margin: 0; line-height: 1.25; }
 .apply .chip { margin-left: 6px; }
 .apply-row .input { flex: 1; min-width: 0; }
 
+.votes { font-size: 13px; color: var(--mid); background: var(--mid-bg); padding: 6px 8px; border-radius: 6px; }
+
 /* ---------- provenance */
 .provenance { border-top: 1px solid var(--border); padding-top: 10px; }
 .provenance summary { cursor: pointer; font-weight: 600; font-size: 14px; }

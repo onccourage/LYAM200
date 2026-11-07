@@ -49,6 +49,10 @@ class Verdict(BaseModel):
     source: Literal["llm", "cache", "rule", "appeal"] = "llm"
     review_reason: str | None = None
     validation_errors: list[str] = Field(default_factory=list)
+    # консенсус нескольких проходов модели
+    votes: dict[str, int] | None = None
+    samples: int | None = None
+    agreement: float | None = None
 
 
 def normalize_text(s: str) -> str:

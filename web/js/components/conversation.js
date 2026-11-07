@@ -2,7 +2,7 @@
 import { api } from "../api.js";
 import { clear, errorBox, h, spinner, toast } from "../dom.js";
 import { CHANNEL } from "../labels.js";
-import { activeChecklist } from "../state.js";
+import { activeChecklist, samplesPref } from "../state.js";
 import { createEvaluationPanel } from "./evaluation.js";
 import { createTranscript } from "./transcript.js";
 
@@ -50,7 +50,7 @@ export async function renderConversation(root, { group, conv, focus }) {
     const busy = h("div", { class: "overlay" }, spinner(full ? "Полная переоценка…" : "Оцениваю…"));
     right.append(busy);
     try {
-      const r = await api.evaluate(group, conv, { checklistId: latest?.id || checklistId, full });
+      const r = await api.evaluate(group, conv, { checklistId: latest?.id || checklistId, full, samples: samplesPref() });
       const note = r.llm_criteria.length
         ? `в LLM: ${r.llm_criteria.join(", ")}` : "всё из кэша, без вызова LLM";
       toast(`Оценено: ${r.total ?? "не рассчитывается"} (${note})`, "ok");

@@ -7,7 +7,9 @@
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
+from collections import Counter
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
@@ -22,9 +24,11 @@ from .scoring import ScoringError, applies_to_channel, score
 from .validator import Verdict, needs_review, validate_response
 
 
-def cache_key(transcript_hash: str, c: Criterion, model: str) -> str:
+def cache_key(transcript_hash: str, c: Criterion, model: str, samples: int = 1) -> str:
     parts = [transcript_hash, c.definition_hash(), model, PROMPT_VERSION,
              settings.explanation_lang, str(settings.long_pause_sec)]
+    if samples > 1:
+        parts.append(f"consensus{samples}")
     return hashlib.sha256("|".join(parts).encode()).hexdigest()
 
 
@@ -49,11 +53,30 @@ class EvalOutcome:
     cached_criteria: list[str] = field(default_factory=list)
 
 
+def merge_votes(cands: list[Verdict], samples: int) -> Verdict:
+    """Консенсус: ответ большинства; ничья — по средней уверенности; обоснование — самого уверенного голоса."""
+    if samples <= 1:
+        return cands[0]
+    votes = Counter(v.answer for v in cands)
+    conf = {a: sum((v.confidence or 0.5) for v in cands if v.answer == a) / n for a, n in votes.items()}
+    top = max(votes, key=lambda a: (votes[a], conf[a]))
+    rep = max((v for v in cands if v.answer == top), key=lambda v: v.confidence or 0.5).model_copy(deep=True)
+    rep.votes = dict(votes)
+    rep.samples = samples
+    rep.agreement = round(votes[top] / samples, 3)
+    if rep.confidence is not None:   # итоговая уверенность не выше доли согласных проходов
+        rep.confidence = round(min(rep.confidence, rep.agreement), 3)
+    return rep
+
+
 async def _ask(provider: LLMProvider, prepared: PreparedConversation, criteria: list[Criterion],
-               usage: LLMUsage, raw_log: list, retry_errors: dict | None = None):
+               usage: LLMUsage, raw_log: list, retry_errors: dict | None = None, sample: int | None = None):
     req = build_request(prepared, criteria, retry_errors)
     try:
-        resp = await provider.complete_json(req["system"], req["user"], req["schema"])
+        if sample is None:
+            resp = await provider.complete_json(req["system"], req["user"], req["schema"])
+        else:
+            resp = await provider.complete_json(req["system"], req["user"], req["schema"], sample=sample)
     except LLMError as e:
         usage.add(e.usage)
         raw_log.append({"criteria": [c.id for c in criteria], "error": str(e), "raw": e.raw, "fatal": e.fatal,
@@ -61,7 +84,7 @@ async def _ask(provider: LLMProvider, prepared: PreparedConversation, criteria: 
         return None, str(e)
     usage.add(resp.usage)
     raw_log.append({"criteria": [c.id for c in criteria], "model": resp.model, "usage": resp.usage.as_dict(),
-                    "data": resp.data, "raw": resp.raw, "retry": bool(retry_errors)})
+                    "data": resp.data, "raw": resp.raw, "retry": bool(retry_errors), "sample": sample or 0})
     return resp, None
 
 
@@ -73,7 +96,9 @@ async def evaluate_conversation(
     use_cache: bool = True,
     save: bool = True,
     db_path: Path | None = None,
+    samples: int | None = None,
 ) -> EvalOutcome:
+    samples = max(1, min(7, samples or settings.llm_samples))
     prepared = preprocess(conv)
     usage = LLMUsage()
     raw_log: list[dict] = []
@@ -88,7 +113,7 @@ async def evaluate_conversation(
 
     # --- кэш
     t_hash = conv.transcript_hash()
-    keys = {c.id: cache_key(t_hash, c, provider.model) for c in to_llm}
+    keys = {c.id: cache_key(t_hash, c, provider.model, samples) for c in to_llm}
     cached_ids: list[str] = []
     if use_cache:
         hits = db.cache_get_many(list(keys.values()), path=db_path)
@@ -103,17 +128,36 @@ async def evaluate_conversation(
         db.cache_delete_for(list(keys.values()), path=db_path)
     missing = [c for c in to_llm if c.id not in verdicts]
 
-    # --- LLM: основной вызов + один повтор по ошибочным критериям
+    # --- LLM: основной вызов (или N проходов консенсуса) + один повтор по ошибочным критериям
     raw_items: dict = {}
     if missing:
-        resp, err = await _ask(provider, prepared, missing, usage, raw_log)
-        if resp is None:
-            llm_error = err
-            errors = {c.id: [err] for c in missing}
+        if samples == 1:
+            results = [await _ask(provider, prepared, missing, usage, raw_log)]
         else:
-            raw_items = resp.data if isinstance(resp.data, dict) else {}
-            ok, errors = validate_response(missing, resp.data, prepared)
-            verdicts.update(ok)
+            results = await asyncio.gather(*(_ask(provider, prepared, missing, usage, raw_log, sample=i)
+                                             for i in range(samples)))
+        per_sample: list[dict[str, Verdict]] = []
+        errors: dict[str, list[str]] = {}
+        call_errors: list[str] = []
+        for resp, err in results:
+            if resp is None:
+                call_errors.append(err)
+                continue
+            if isinstance(resp.data, dict):
+                for k, v in resp.data.items():
+                    raw_items.setdefault(k, v)
+            ok, errs = validate_response(missing, resp.data, prepared)
+            per_sample.append(ok)
+            for cid, e in errs.items():
+                errors.setdefault(cid, []).extend(e)
+        if not per_sample:
+            llm_error = call_errors[0]
+            errors = {c.id: [llm_error] for c in missing}
+        for c in missing:
+            cands = [s[c.id] for s in per_sample if c.id in s]
+            if cands:
+                verdicts[c.id] = merge_votes(cands, samples)
+        errors = {cid: e for cid, e in errors.items() if cid not in verdicts}
         fatal = any(x.get("fatal") for x in raw_log)
         if errors and not fatal:
             retry = [c for c in missing if c.id in errors]
@@ -173,6 +217,7 @@ async def evaluate_conversation(
         "raw_responses": raw_log,
         "llm_error": llm_error,
         "llm_fatal": any(x.get("fatal") for x in raw_log),
+        "samples": samples,
     }
     if save and status != "error":
         record["id"] = db.save_evaluation(record, path=db_path)
