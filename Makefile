@@ -1,4 +1,4 @@
-.PHONY: install run test fetch batch seed export-seed rehearse reset-db
+.PHONY: install run test fetch batch seed export-seed rehearse reset-db results-dev results-prod
 
 install:
 	pip install -r requirements.txt
@@ -26,3 +26,10 @@ rehearse:
 
 reset-db:
 	rm -f data/cqa.db data/cqa.db-wal data/cqa.db-shm
+
+# Сдача результатов (CQA_Student_Guide_Appendix_Results). TEAM_NAME — в .env или make TEAM_NAME="..."
+results-dev:
+	python scripts/export_results.py dev
+
+results-prod:
+	python scripts/export_results.py prod --group $(GROUP)
